@@ -5,7 +5,7 @@ from ppo_agent import ActorNetwork, CriticNetwork
 
 def main():
     # 1. Ortamı Yükle
-    env = gym.make('Ant-v4')
+    env = gym.make('Ant-v4', render_mode='human')
 
     # 2. Ortamdan Gerekli Bilgileri Al
     # Gözlem uzayının boyutu (state_dim)
