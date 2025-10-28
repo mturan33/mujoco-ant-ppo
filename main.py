@@ -5,7 +5,7 @@ from ppo_agent import ActorNetwork, CriticNetwork
 
 def main():
     # 1. Ortamı Yükle
-    env = gym.make('Ant-v4', render_mode='human')
+    env = gym.make('Ant-v5', render_mode='human')
 
     # 2. Ortamdan Gerekli Bilgileri Al
     # Gözlem uzayının boyutu (state_dim)
@@ -51,7 +51,6 @@ def main():
     print(f"Durumun Değer Tahmini (V(s)): {state_value.cpu().detach().numpy()}")
 
     env.close()
-
 
 if __name__ == '__main__':
     main()
