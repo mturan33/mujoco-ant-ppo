@@ -13,7 +13,8 @@ print(f"Kullanılan Cihaz: {device}")
 def main():
     # --- Deney Ayarları ---
     load_model = False  # Kayıtlı modelden devam etmek için True yap
-    experiment_name = "Ant-v5_PPO_10M"
+    base_experiment_name = "Ant-v5_PPO_1M"
+    run_name = f"{base_experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
     # Klasörleri ve log dosyasını hazırla
     if not os.path.exists("./models"):
@@ -21,18 +22,15 @@ def main():
     if not os.path.exists("./runs"):
         os.makedirs("./runs")
 
-    log_file_path = f"./runs/{experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
-
-    # TensorBoard için log klasörü oluştur
-    tb_log_dir = f"./runs/{experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-    writer = SummaryWriter(tb_log_dir)
+    log_file_path = f"./runs/{run_name}.txt"
+    writer = SummaryWriter(f"./runs/{run_name}")
 
     def log_to_file(message):
         with open(log_file_path, 'a') as f:
             f.write(message + '\\n')
 
     # --- Hiperparametreler ---
-    total_timesteps = 10000000  # Toplam eğitim adımı sayısı
+    total_timesteps = 1000000  # Toplam eğitim adımı sayısı
     learning_rate = 3e-4       # Öğrenme oranı
     gamma = 0.99               # Gelecekteki ödülleri ne kadar önemseyeceğimizi belirleyen indirim faktörü
     gae_lambda = 0.95          # GAE için lambda değeri (Avantaj hesaplamada kullanılır)
@@ -137,7 +135,7 @@ def main():
         writer.add_scalar('charts/avg_reward_100_episodes', np.mean(episode_rewards_list[-100:]), global_step_count)
         writer.add_scalar('charts/exploration_std', avg_std, global_step_count)
 
-    agent.save("models", experiment_name)
+    agent.save("models", run_name)
     log_to_file("Eğitim tamamlandı ve modeller kaydedildi.")
     writer.close()
     env.close()

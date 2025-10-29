@@ -7,7 +7,7 @@ import time
 
 def test():
     # --- Ayarlar ---
-    model_name = "Ant-v5_PPO_10M"  # Yüklemek istediğiniz modelin adı
+    model_name = "Ant-v5_PPO_1M"  # Yüklemek istediğiniz modelin adı
     num_episodes = 10  # Kaç bölüm test etmek istediğiniz
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

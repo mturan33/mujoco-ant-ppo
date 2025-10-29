@@ -138,6 +138,10 @@ class PPOAgent:
         Toplanan verileri kullanarak Aktör ve Kritik ağlarını günceller.
         """
 
+        # --- Hiperparametre: Entropi Katsayısı ---
+        self.entropy_coef = 0.01
+        # ----------------------------------------
+
         # Listeleri tek bir büyük tensöre dönüştür. Bu, verimli batch işleme için gereklidir.
         device = returns.device # Gelen tensörlerden cihazı öğren
         states = torch.tensor(np.array(states), dtype=torch.float32).to(device)
@@ -162,21 +166,24 @@ class PPOAgent:
                 end = start + batch_size
                 batch_indices = indices[start:end]
 
-                # Mevcut yığın için verileri seç
-                batch_states = states[batch_indices]
-                norm_batch_states = torch.clamp((batch_states - self.obs_rms.mean) / torch.sqrt(self.obs_rms.var + 1e-8), -10.0, 10.0)
-                # --- AKTÖR KAYBI ---
-                dist = self.actor(norm_batch_states)
-                std_devs.append(dist.stddev.mean().item()) # Keşif miktarını kaydet
-
                 batch_actions = actions[batch_indices]
                 batch_old_log_probs = old_log_probs[batch_indices]
                 batch_advantages = advantages[batch_indices]
                 batch_returns = returns[batch_indices]
 
-                # --- 1. AKTÖR KAYBINI (LOSS) HESAPLA ---
+                # Mevcut yığın için verileri seç
+                batch_states = states[batch_indices]
+                batch_advantages = (batch_advantages - batch_advantages.mean()) / (batch_advantages.std() + 1e-8)
+                norm_batch_states = torch.clamp((batch_states - self.obs_rms.mean) / torch.sqrt(self.obs_rms.var + 1e-8), -10.0, 10.0)
 
-                # Mevcut (güncellenmiş) politika ile eylemlerin log olasılıklarını yeniden hesapla
+                # --- AKTÖR KAYBI ---
+                dist = self.actor(norm_batch_states)
+                std_devs.append(dist.stddev.mean().item()) # Keşif miktarını kaydet
+
+                # Entropi Kaybını Hesapla
+                entropy_loss = dist.entropy().mean()
+
+                # --- 1. AKTÖR KAYBINI (LOSS) HESAPLA ---
                 dist = self.actor(norm_batch_states)
                 new_log_probs = dist.log_prob(batch_actions).sum(dim=-1)
 
@@ -191,7 +198,7 @@ class PPOAgent:
 
                 # İki versiyondan daha "kötümser" olanını seçerek büyük güncellemeleri engelleriz.
                 # Gradient ascent yapmak istediğimiz için kaybı negatif yapıyoruz.
-                actor_loss = -torch.min(surr1, surr2).mean()
+                actor_loss = -torch.min(surr1, surr2).mean() + self.entropy_coef * entropy_loss
 
                 # --- KRİTİK KAYBI ---
                 new_values = self.critic(norm_batch_states)
@@ -214,5 +221,5 @@ class PPOAgent:
                 actor_losses.append(actor_loss.item())
                 critic_losses.append(critic_loss.item())
 
-                # Ortalama kayıpları ve std'yi geri döndür ---
-                return np.mean(actor_losses), np.mean(critic_losses), np.mean(std_devs)
+        # Ortalama kayıpları ve std'yi geri döndür ---
+        return np.mean(actor_losses), np.mean(critic_losses), np.mean(std_devs)
