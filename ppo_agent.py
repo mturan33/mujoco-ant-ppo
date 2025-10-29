@@ -51,6 +51,10 @@ class PPOAgent:
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr)
 
+    def to(self, device):
+        self.actor.to(device)
+        self.critic.to(device)
+
     def compute_advantages(self, rewards, dones, values, next_value):
         """
         GAE (Generalized Advantage Estimation) kullanarak avantajları hesaplar.
@@ -58,14 +62,15 @@ class PPOAgent:
         """
 
         # 'rewards', 'dones', 'values' listelerini PyTorch tensörlerine dönüştür
-        rewards = torch.tensor(rewards, dtype=torch.float32).view(-1, 1)
-        dones = torch.tensor(dones, dtype=torch.float32).view(-1, 1)
+        device = next_value.device # Gelen tensörden cihazı öğren
+        rewards = torch.tensor(rewards, dtype=torch.float32).view(-1, 1).to(device)
+        dones = torch.tensor(dones, dtype=torch.float32).view(-1, 1).to(device)
         values = torch.cat(values + [next_value], dim=0)
 
         # Avantajları ve getirileri saklamak için tensörler oluştur
         num_steps = len(rewards)
-        advantages = torch.zeros(num_steps, 1)
-        returns = torch.zeros(num_steps, 1)
+        advantages = torch.zeros(num_steps, 1).to(device)
+        returns = torch.zeros(num_steps, 1).to(device)
 
         # GAE hesaplaması sondan başa doğru yapılır
         last_advantage = 0
@@ -98,7 +103,8 @@ class PPOAgent:
         """
 
         # Listeleri tek bir büyük tensöre dönüştür. Bu, verimli batch işleme için gereklidir.
-        states = torch.tensor(np.array(states), dtype=torch.float32)
+        device = returns.device # Gelen tensörlerden cihazı öğren
+        states = torch.tensor(np.array(states), dtype=torch.float32).to(device)
         actions = torch.cat(actions, dim=0)
         old_log_probs = torch.cat(log_probs, dim=0)
 

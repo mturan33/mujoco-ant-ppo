@@ -3,14 +3,17 @@ import torch
 from ppo_agent import PPOAgent
 import numpy as np
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"Kullanılan Cihaz: {device}")
+
 def main():
 
     # --- Hiperparametreler ---
-    total_timesteps = 1000000  # Toplam eğitim adımı sayısı
+    total_timesteps = 10000000  # Toplam eğitim adımı sayısı
     learning_rate = 3e-4       # Öğrenme oranı
     gamma = 0.99               # Gelecekteki ödülleri ne kadar önemseyeceğimizi belirleyen indirim faktörü
     gae_lambda = 0.95          # GAE için lambda değeri (Avantaj hesaplamada kullanılır)
-    rollout_steps = 2048       # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
+    rollout_steps = 4096       # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
     update_epochs = 10         # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
     clip_ratio = 0.2           # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
     batch_size = 64            # Her bir güncelleme adımında kullanılacak veri yığını boyutu
@@ -18,7 +21,7 @@ def main():
     # -------------------------
 
     # 1. Ortamı Yükle
-    env = gym.make('Ant-v5', render_mode='human')
+    env = gym.make('Ant-v5')
 
     # 2. Ortamdan Gerekli Bilgileri Al
     # Gözlem uzayının boyutu (state_dim)
@@ -38,6 +41,8 @@ def main():
     # 3. Aktör ve Kritik Ağlarını Oluştur
     agent = PPOAgent(state_dim, action_dim, max_action, learning_rate, gamma, gae_lambda, clip_ratio)
 
+    agent.to(device)
+
     # Ortamı sıfırla ve ilk durumu (state) al
     state, info = env.reset()
 
@@ -56,7 +61,7 @@ def main():
 
         for _ in range(rollout_steps):
             global_step_count += 1
-            state_tensor = torch.FloatTensor(state.reshape(1, -1))
+            state_tensor = torch.FloatTensor(state.reshape(1, -1)).to(device)
 
             with torch.no_grad():
                 action_dist = agent.actor(state_tensor)
@@ -87,7 +92,7 @@ def main():
 
         # --- 2. Avantaj ve Getiri Hesaplama ---
         with torch.no_grad():
-            next_state_tensor = torch.FloatTensor(state.reshape(1, -1))
+            next_state_tensor = torch.FloatTensor(state.reshape(1, -1)).to(device)
             next_value = agent.critic(next_state_tensor)
         advantages, returns = agent.compute_advantages(rewards, dones, values, next_value)
 
