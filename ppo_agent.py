@@ -145,6 +145,9 @@ class PPOAgent:
         old_log_probs = torch.cat(log_probs, dim=0)
 
         self.obs_rms.update(states)
+        actor_losses = []
+        critic_losses = []
+        std_devs = []
 
         # Her bir güncelleme döngüsü (epoch) için...
         for _ in range(num_epochs):
@@ -162,6 +165,10 @@ class PPOAgent:
                 # Mevcut yığın için verileri seç
                 batch_states = states[batch_indices]
                 norm_batch_states = torch.clamp((batch_states - self.obs_rms.mean) / torch.sqrt(self.obs_rms.var + 1e-8), -10.0, 10.0)
+                # --- AKTÖR KAYBI ---
+                dist = self.actor(norm_batch_states)
+                std_devs.append(dist.stddev.mean().item()) # Keşif miktarını kaydet
+
                 batch_actions = actions[batch_indices]
                 batch_old_log_probs = old_log_probs[batch_indices]
                 batch_advantages = advantages[batch_indices]
@@ -186,10 +193,7 @@ class PPOAgent:
                 # Gradient ascent yapmak istediğimiz için kaybı negatif yapıyoruz.
                 actor_loss = -torch.min(surr1, surr2).mean()
 
-                # --- 2. KRİTİK KAYBINI (LOSS) HESAPLA ---
-
-                # Kritik ağının mevcut tahminleri ile hedeflenen getiriler (returns) arasındaki fark.
-                # Mean Squared Error (Ortalama Kare Hata)
+                # --- KRİTİK KAYBI ---
                 new_values = self.critic(norm_batch_states)
                 critic_loss = nn.MSELoss()(new_values, batch_returns)
 
@@ -205,3 +209,10 @@ class PPOAgent:
                 # 0.5 ile çarpmak yaygın bir pratiktir, iki loss'un büyüklüğünü dengeler.
                 (0.5 * critic_loss).backward()
                 self.critic_optimizer.step()
+
+                # Kayıpları listeye ekle
+                actor_losses.append(actor_loss.item())
+                critic_losses.append(critic_loss.item())
+
+                # Ortalama kayıpları ve std'yi geri döndür ---
+                return np.mean(actor_losses), np.mean(critic_losses), np.mean(std_devs)

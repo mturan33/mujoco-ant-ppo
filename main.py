@@ -5,6 +5,7 @@ import numpy as np
 import os
 import time
 from datetime import datetime
+from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Kullanılan Cihaz: {device}")
@@ -21,6 +22,10 @@ def main():
         os.makedirs("./runs")
 
     log_file_path = f"./runs/{experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+
+    # TensorBoard için log klasörü oluştur
+    tb_log_dir = f"./runs/{experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    writer = SummaryWriter(tb_log_dir)
 
     def log_to_file(message):
         with open(log_file_path, 'a') as f:
@@ -124,10 +129,17 @@ def main():
         advantages, returns = agent.compute_advantages(rewards, dones, values, next_value)
 
         # --- 3. Öğrenme Aşaması ---
-        agent.learn(states, actions, log_probs, returns, advantages, update_epochs, batch_size)
+        actor_loss, critic_loss, avg_std = agent.learn(states, actions, log_probs, returns, advantages, update_epochs, batch_size)
+
+        # --- 4. TensorBoard'a Loglama ---
+        writer.add_scalar('losses/actor_loss', actor_loss, global_step_count)
+        writer.add_scalar('losses/critic_loss', critic_loss, global_step_count)
+        writer.add_scalar('charts/avg_reward_100_episodes', np.mean(episode_rewards_list[-100:]), global_step_count)
+        writer.add_scalar('charts/exploration_std', avg_std, global_step_count)
 
     agent.save("models", experiment_name)
     log_to_file("Eğitim tamamlandı ve modeller kaydedildi.")
+    writer.close()
     env.close()
     print("Eğitim tamamlandı!")
 
