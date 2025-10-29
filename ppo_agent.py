@@ -3,6 +3,30 @@ import torch.nn as nn
 from torch.distributions import Normal
 import numpy as np
 
+class RunningMeanStd:
+    def __init__(self, shape, device):
+        self.mean = torch.zeros(shape).to(device)
+        self.var = torch.ones(shape).to(device)
+        self.count = 1e-4
+
+    def update(self, x):
+        batch_mean = torch.mean(x, dim=0)
+        batch_var = torch.var(x, dim=0)
+        batch_count = x.shape[0]
+
+        delta = batch_mean - self.mean
+        tot_count = self.count + batch_count
+
+        new_mean = self.mean + delta * batch_count / tot_count
+        m_a = self.var * self.count
+        m_b = batch_var * batch_count
+        M2 = m_a + m_b + torch.square(delta) * self.count * batch_count / tot_count
+        new_var = M2 / tot_count
+
+        self.mean = new_mean
+        self.var = new_var
+        self.count = tot_count
+
 class ActorNetwork(nn.Module):
     def __init__(self, state_dim, action_dim, max_action):
         super(ActorNetwork, self).__init__()
@@ -38,7 +62,7 @@ class CriticNetwork(nn.Module):
 
 # PPO Ajan Sınıfı ağları, optimizer'ları ve öğrenme mantığını bir araya getiriyor.
 class PPOAgent:
-    def __init__(self, state_dim, action_dim, max_action, lr, gamma, gae_lambda, clip_ratio):
+    def __init__(self, state_dim, action_dim, max_action, lr, gamma, gae_lambda, clip_ratio, device):
         self.gamma = gamma
         self.gae_lambda = gae_lambda
         self.clip_ratio = clip_ratio
@@ -51,9 +75,21 @@ class PPOAgent:
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr)
 
+        self.obs_rms = RunningMeanStd(shape=(state_dim,), device=device)
+
     def to(self, device):
         self.actor.to(device)
         self.critic.to(device)
+
+    def save(self, directory, filename):
+        print("... Modeller kaydediliyor ...")
+        torch.save(self.actor.state_dict(), f'./{directory}/{filename}_actor.pth')
+        torch.save(self.critic.state_dict(), f'./{directory}/{filename}_critic.pth')
+
+    def load(self, directory, filename):
+        print("... Modeller yükleniyor ...")
+        self.actor.load_state_dict(torch.load(f'./{directory}/{filename}_actor.pth'))
+        self.critic.load_state_dict(torch.load(f'./{directory}/{filename}_critic.pth'))
 
     def compute_advantages(self, rewards, dones, values, next_value):
         """
@@ -108,6 +144,8 @@ class PPOAgent:
         actions = torch.cat(actions, dim=0)
         old_log_probs = torch.cat(log_probs, dim=0)
 
+        self.obs_rms.update(states)
+
         # Her bir güncelleme döngüsü (epoch) için...
         for _ in range(num_epochs):
 
@@ -123,6 +161,7 @@ class PPOAgent:
 
                 # Mevcut yığın için verileri seç
                 batch_states = states[batch_indices]
+                norm_batch_states = torch.clamp((batch_states - self.obs_rms.mean) / torch.sqrt(self.obs_rms.var + 1e-8), -10.0, 10.0)
                 batch_actions = actions[batch_indices]
                 batch_old_log_probs = old_log_probs[batch_indices]
                 batch_advantages = advantages[batch_indices]
@@ -131,7 +170,7 @@ class PPOAgent:
                 # --- 1. AKTÖR KAYBINI (LOSS) HESAPLA ---
 
                 # Mevcut (güncellenmiş) politika ile eylemlerin log olasılıklarını yeniden hesapla
-                dist = self.actor(batch_states)
+                dist = self.actor(norm_batch_states)
                 new_log_probs = dist.log_prob(batch_actions).sum(dim=-1)
 
                 # Oran (Ratio): r_t(θ) = exp(log π_θ(a_t|s_t) - log π_θ_old(a_t|s_t))
@@ -151,7 +190,7 @@ class PPOAgent:
 
                 # Kritik ağının mevcut tahminleri ile hedeflenen getiriler (returns) arasındaki fark.
                 # Mean Squared Error (Ortalama Kare Hata)
-                new_values = self.critic(batch_states)
+                new_values = self.critic(norm_batch_states)
                 critic_loss = nn.MSELoss()(new_values, batch_returns)
 
                 # --- 3. AĞLARI GÜNCELLE ---

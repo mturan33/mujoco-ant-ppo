@@ -2,11 +2,29 @@ import gymnasium as gym
 import torch
 from ppo_agent import PPOAgent
 import numpy as np
+import os
+import time
+from datetime import datetime
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Kullanılan Cihaz: {device}")
 
 def main():
+    # --- Deney Ayarları ---
+    load_model = False  # Kayıtlı modelden devam etmek için True yap
+    experiment_name = "Ant-v5_PPO_10M"
+
+    # Klasörleri ve log dosyasını hazırla
+    if not os.path.exists("./models"):
+        os.makedirs("./models")
+    if not os.path.exists("./runs"):
+        os.makedirs("./runs")
+
+    log_file_path = f"./runs/{experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+
+    def log_to_file(message):
+        with open(log_file_path, 'a') as f:
+            f.write(message + '\\n')
 
     # --- Hiperparametreler ---
     total_timesteps = 10000000  # Toplam eğitim adımı sayısı
@@ -17,7 +35,6 @@ def main():
     update_epochs = 10         # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
     clip_ratio = 0.2           # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
     batch_size = 64            # Her bir güncelleme adımında kullanılacak veri yığını boyutu
-
     # -------------------------
 
     # 1. Ortamı Yükle
@@ -39,9 +56,15 @@ def main():
     print(f"Max Action Value: {max_action}")
 
     # 3. Aktör ve Kritik Ağlarını Oluştur
-    agent = PPOAgent(state_dim, action_dim, max_action, learning_rate, gamma, gae_lambda, clip_ratio)
-
+    agent = PPOAgent(state_dim, action_dim, max_action, learning_rate, gamma, gae_lambda, clip_ratio, device)
     agent.to(device)
+
+    if load_model:
+        try:
+            agent.load("models", experiment_name)
+            log_to_file("Önceden eğitilmiş model yüklendi.")
+        except FileNotFoundError:
+            log_to_file("Model dosyası bulunamadı, sıfırdan eğitime başlanıyor.")
 
     # Ortamı sıfırla ve ilk durumu (state) al
     state, info = env.reset()
@@ -90,6 +113,10 @@ def main():
                 current_episode_reward = 0
                 state, info = env.reset()
 
+                log_message = f"Adım: {global_step_count}, Ödül: {current_episode_reward:.2f}, Ort. Ödül: {avg_reward:.2f}"
+                print(log_message)
+                log_to_file(log_message)
+
         # --- 2. Avantaj ve Getiri Hesaplama ---
         with torch.no_grad():
             next_state_tensor = torch.FloatTensor(state.reshape(1, -1)).to(device)
@@ -99,6 +126,8 @@ def main():
         # --- 3. Öğrenme Aşaması ---
         agent.learn(states, actions, log_probs, returns, advantages, update_epochs, batch_size)
 
+    agent.save("models", experiment_name)
+    log_to_file("Eğitim tamamlandı ve modeller kaydedildi.")
     env.close()
     print("Eğitim tamamlandı!")
 
