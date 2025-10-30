@@ -1,4 +1,4 @@
-# Training a MuJoCo Ant Agent from Scratch with PPO
+# Training a MuJoCo Ant Agent from Scratch with PPO and SAC
 
 This project is a from-scratch implementation of the **Proximal Policy Optimization (PPO)** algorithm using PyTorch for the `Ant-v5` environment from the `gymnasium[mujoco]` library. The primary goal of this project is to train a four-legged ant agent to walk forward without falling over.
 
