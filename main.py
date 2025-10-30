@@ -79,6 +79,12 @@ def main():
     current_episode_reward = 0
     episode_rewards_list = []
 
+    def lr_lambda(step):
+        return 1.0 - (step / total_timesteps)
+
+    actor_scheduler = torch.optim.lr_scheduler.LambdaLR(agent.actor_optimizer, lr_lambda)
+    critic_scheduler = torch.optim.lr_scheduler.LambdaLR(agent.critic_optimizer, lr_lambda)
+
     # Ana Eğitim Döngüsü
     while global_step_count < total_timesteps:
 
@@ -129,7 +135,11 @@ def main():
         # --- 3. Öğrenme Aşaması ---
         actor_loss, critic_loss, avg_std = agent.learn(states, actions, log_probs, returns, advantages, update_epochs, batch_size)
 
+        actor_scheduler.step()
+        critic_scheduler.step()
+
         # --- 4. TensorBoard'a Loglama ---
+        writer.add_scalar('charts/learning_rate', actor_scheduler.get_last_lr()[0], global_step_count)
         writer.add_scalar('losses/actor_loss', actor_loss, global_step_count)
         writer.add_scalar('losses/critic_loss', critic_loss, global_step_count)
         writer.add_scalar('charts/avg_reward_100_episodes', np.mean(episode_rewards_list[-100:]), global_step_count)

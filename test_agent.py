@@ -46,7 +46,7 @@ def test():
             total_reward += reward
 
             # Simülasyonu yavaşlatmak için (isteğe bağlı)
-            time.sleep(0.01)
+            time.sleep(0.05)
 
         print(f"Bölüm {i + 1} tamamlandı. Toplam Ödül: {total_reward:.2f}")
 
