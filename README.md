@@ -6,7 +6,7 @@ This work serves as a foundational step for understanding the internal dynamics 
 
 ![TensorBoard Graphs](assets/tensorboard_screenshot.png)
 
-## 🚀 Key Features
+## Key Features
 
 - **From-Scratch PPO Implementation:**
     - Actor-Critic architecture.
@@ -21,7 +21,7 @@ This work serves as a foundational step for understanding the internal dynamics 
     - **Advantage Normalization:** Normalizes advantage values within each batch to ensure stable policy updates.
     - **Entropy Regularization:** An entropy term is added to the loss function to encourage exploration and prevent premature convergence.
 
-## ⚙️ Setup
+## Setup
 
 This project requires Python 3.10+ and an installed version of MuJoCo.
 
@@ -51,7 +51,7 @@ This project requires Python 3.10+ and an installed version of MuJoCo.
         pip install gymnasium[mujoco] numpy tensorboard
         ```
 
-## 🎮 Usage
+## Usage
 
 ### Starting the Training
 
@@ -82,14 +82,14 @@ python test_agent.py
 ```
 - Before running, make sure to update the `model_name` variable inside `test_agent.py` to match the name of the model you want to test (located in the `models` folder).
 
-## 📝 Future Work
+## Future Work
 
 - [ ] Implement Soft Actor-Critic (SAC) from scratch and compare its performance with PPO.
 - [ ] Design more complex environments with obstacles and uneven terrain.
 - [ ] Incorporate camera data into the agent's observation space to explore Vision-based RL.
 - [ ] Transfer the foundational knowledge gained from this project to a more advanced simulator like NVIDIA Isaac Sim.
 
-## 👤 Author
+## Author
 
 **Mehmet Turan**
 - GitHub: [@mturan33](https://github.com/mturan33)
