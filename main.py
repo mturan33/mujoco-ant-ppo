@@ -13,6 +13,7 @@ print(f"Kullanılan Cihaz: {device}")
 def main():
     # --- Deney Ayarları ---
     load_model = False  # Kayıtlı modelden devam etmek için True yap
+    experiment_name = "Ant-v5_PPO_1M_***"
     base_experiment_name = "Ant-v5_PPO_1M"
     run_name = f"{base_experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
@@ -31,13 +32,14 @@ def main():
 
     # --- Hiperparametreler ---
     total_timesteps = 1000000  # Toplam eğitim adımı sayısı
-    learning_rate = 3e-4       # Öğrenme oranı
+    learning_rate = 2.5e-4     # Öğrenme oranı
     gamma = 0.99               # Gelecekteki ödülleri ne kadar önemseyeceğimizi belirleyen indirim faktörü
     gae_lambda = 0.95          # GAE için lambda değeri (Avantaj hesaplamada kullanılır)
     rollout_steps = 4096       # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
     update_epochs = 10         # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
     clip_ratio = 0.2           # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
     batch_size = 64            # Her bir güncelleme adımında kullanılacak veri yığını boyutu
+    entropy_coef = 0.005       # Entropy coefficient
     # -------------------------
 
     # 1. Ortamı Yükle
@@ -133,7 +135,7 @@ def main():
         advantages, returns = agent.compute_advantages(rewards, dones, values, next_value)
 
         # --- 3. Öğrenme Aşaması ---
-        actor_loss, critic_loss, avg_std = agent.learn(states, actions, log_probs, returns, advantages, update_epochs, batch_size)
+        actor_loss, critic_loss, avg_std = agent.learn(states, actions, log_probs, returns, advantages, update_epochs, batch_size, entropy_coef)
 
         actor_scheduler.step()
         critic_scheduler.step()

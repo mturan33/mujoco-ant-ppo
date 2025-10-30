@@ -85,11 +85,20 @@ class PPOAgent:
         print("... Modeller kaydediliyor ...")
         torch.save(self.actor.state_dict(), f'./{directory}/{filename}_actor.pth')
         torch.save(self.critic.state_dict(), f'./{directory}/{filename}_critic.pth')
+        torch.save({
+            'mean': self.obs_rms.mean,
+            'var': self.obs_rms.var,
+            'count': self.obs_rms.count
+        }, f'./{directory}/{filename}_rms.pth')
 
     def load(self, directory, filename):
         print("... Modeller yükleniyor ...")
         self.actor.load_state_dict(torch.load(f'./{directory}/{filename}_actor.pth'))
         self.critic.load_state_dict(torch.load(f'./{directory}/{filename}_critic.pth'))
+        rms_data = torch.load(f'./{directory}/{filename}_rms.pth')
+        self.obs_rms.mean = rms_data['mean']
+        self.obs_rms.var = rms_data['var']
+        self.obs_rms.count = rms_data['count']
 
     def compute_advantages(self, rewards, dones, values, next_value):
         """
@@ -133,13 +142,13 @@ class PPOAgent:
 
         return advantages, returns
 
-    def learn(self, states, actions, log_probs, returns, advantages, num_epochs, batch_size):
+    def learn(self, states, actions, log_probs, returns, advantages, num_epochs, batch_size, entropy_coef):
         """
         Toplanan verileri kullanarak Aktör ve Kritik ağlarını günceller.
         """
 
         # --- Hiperparametre: Entropi Katsayısı ---
-        self.entropy_coef = 0.01
+        self.entropy_coef = entropy_coef
         # ----------------------------------------
 
         # Listeleri tek bir büyük tensöre dönüştür. Bu, verimli batch işleme için gereklidir.
