@@ -1,0 +1,3 @@
+gymnasium~=1.2.1
+torch~=2.10.0.dev20251029+cu130
+numpy~=2.3.4

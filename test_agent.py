@@ -7,7 +7,7 @@ import time
 
 def test():
     # --- Ayarlar ---
-    model_name = "Ant-v5_PPO_1M"  # Yüklemek istediğiniz modelin adı
+    model_name = "Ant-v5_PPO_1M_2025-10-29_22-26-07"  # Yüklemek istediğiniz modelin adı
     num_episodes = 10  # Kaç bölüm test etmek istediğiniz
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -20,7 +20,7 @@ def test():
     max_action = float(env.action_space.high[0])
 
     # Agent'ı oluştur (hiperparametreler önemli değil, sadece ağ yapısı için gerekli)
-    agent = PPOAgent(state_dim, action_dim, max_action, 0, 0, 0, 0)
+    agent = PPOAgent(state_dim, action_dim, max_action, 0, 0, 0, 0, device)
     agent.to(device)
 
     try:
@@ -46,7 +46,7 @@ def test():
             total_reward += reward
 
             # Simülasyonu yavaşlatmak için (isteğe bağlı)
-            # time.sleep(0.01)
+            time.sleep(0.01)
 
         print(f"Bölüm {i + 1} tamamlandı. Toplam Ödül: {total_reward:.2f}")
 
