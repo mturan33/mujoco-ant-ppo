@@ -36,6 +36,11 @@ class ActorNetwork(nn.Module):
         self.log_std_layer = nn.Linear(256, action_dim)
         self.max_action = max_action
 
+        torch.nn.init.orthogonal_(self.layer_1.weight)
+        torch.nn.init.orthogonal_(self.layer_2.weight)
+        torch.nn.init.orthogonal_(self.mean_layer.weight, gain=0.01)
+        torch.nn.init.orthogonal_(self.log_std_layer.weight, gain=0.01)
+
     def forward(self, state):
         x = torch.relu(self.layer_1(state))
         x = torch.relu(self.layer_2(x))
@@ -143,30 +148,20 @@ class PPOAgent:
         return advantages, returns
 
     def learn(self, states, actions, log_probs, returns, advantages, num_epochs, batch_size, entropy_coef):
-        """
-        Toplanan verileri kullanarak Aktör ve Kritik ağlarını günceller.
-        """
-
-        # --- Hiperparametre: Entropi Katsayısı ---
-        self.entropy_coef = entropy_coef
-        # ----------------------------------------
-
-        # Listeleri tek bir büyük tensöre dönüştür. Bu, verimli batch işleme için gereklidir.
-        device = returns.device # Gelen tensörlerden cihazı öğren
+        # Veriyi ve istatistikleri hazırla
+        device = returns.device
         states = torch.tensor(np.array(states), dtype=torch.float32).to(device)
         actions = torch.cat(actions, dim=0)
         old_log_probs = torch.cat(log_probs, dim=0)
 
         self.obs_rms.update(states)
+
         actor_losses = []
         critic_losses = []
         std_devs = []
 
-        # Her bir güncelleme döngüsü (epoch) için...
+        # Her bir güncelleme döngüsü (epoch) için
         for _ in range(num_epochs):
-
-            # Veri setini karıştırıp küçük yığınlara (batches) bölerek işleyeceğiz.
-            # Bu, öğrenme sürecini daha stabil hale getirir.
             num_samples = len(states)
             indices = np.arange(num_samples)
             np.random.shuffle(indices)
@@ -175,60 +170,65 @@ class PPOAgent:
                 end = start + batch_size
                 batch_indices = indices[start:end]
 
+                batch_states = states[batch_indices]
                 batch_actions = actions[batch_indices]
                 batch_old_log_probs = old_log_probs[batch_indices]
                 batch_advantages = advantages[batch_indices]
                 batch_returns = returns[batch_indices]
 
-                # Mevcut yığın için verileri seç
-                batch_states = states[batch_indices]
+                # --- 1. Avantaj Normalizasyonu ---
                 batch_advantages = (batch_advantages - batch_advantages.mean()) / (batch_advantages.std() + 1e-8)
-                norm_batch_states = torch.clamp((batch_states - self.obs_rms.mean) / torch.sqrt(self.obs_rms.var + 1e-8), -10.0, 10.0)
 
-                # --- AKTÖR KAYBI ---
+                # --- 2. Gözlem Normalizasyonu ---
+                norm_batch_states = torch.clamp(
+                    (batch_states - self.obs_rms.mean) / torch.sqrt(self.obs_rms.var + 1e-8), -10.0, 10.0)
+
+                # --- 3. AKTÖR KAYBINI HESAPLA ---
                 dist = self.actor(norm_batch_states)
-                std_devs.append(dist.stddev.mean().item()) # Keşif miktarını kaydet
-
-                # Entropi Kaybını Hesapla
+                std_devs.append(dist.stddev.mean().item())
                 entropy_loss = dist.entropy().mean()
 
-                # --- 1. AKTÖR KAYBINI (LOSS) HESAPLA ---
-                dist = self.actor(norm_batch_states)
                 new_log_probs = dist.log_prob(batch_actions).sum(dim=-1)
-
-                # Oran (Ratio): r_t(θ) = exp(log π_θ(a_t|s_t) - log π_θ_old(a_t|s_t))
-                # Yeni politika ile eski politika ne kadar farklı?
                 ratio = torch.exp(new_log_probs - batch_old_log_probs)
 
-                # Kırpılmış (Clipped) Amaç Fonksiyonu
-                # PPO'nun kalbi burasıdır.
                 surr1 = ratio * batch_advantages
                 surr2 = torch.clamp(ratio, 1 - self.clip_ratio, 1 + self.clip_ratio) * batch_advantages
 
-                # İki versiyondan daha "kötümser" olanını seçerek büyük güncellemeleri engelleriz.
-                # Gradient ascent yapmak istediğimiz için kaybı negatif yapıyoruz.
-                actor_loss = -torch.min(surr1, surr2).mean() + self.entropy_coef * entropy_loss
+                actor_loss = -torch.min(surr1,
+                                        surr2).mean() - entropy_coef * entropy_loss  # NOT: Entropiyi eksiye çektik, keşfi teşvik eder!
 
-                # --- KRİTİK KAYBI ---
+                # --- 4. KRİTİK KAYBINI HESAPLA (DEĞER KIRPMA İLE) ---
                 new_values = self.critic(norm_batch_states)
-                critic_loss = nn.MSELoss()(new_values, batch_returns)
 
-                # --- 3. AĞLARI GÜNCELLE ---
+                # Değer Fonksiyonu Kırpma (Value Clipping)
+                # Kritik ağının tahminlerinin her güncellemede çok fazla değişmesini engeller.
+                # Bu, Aktör'ün istikrarına da yardımcı olur.
+                critic_loss_unclipped = nn.MSELoss()(new_values, batch_returns)
 
-                # Aktör Güncellemesi
-                self.actor_optimizer.zero_grad()  # Önceki gradient'leri sıfırla
-                actor_loss.backward()  # Yeni gradient'leri hesapla
-                self.actor_optimizer.step()  # Ağırlıkları güncelle
+                # Önceki değer tahminlerini al (veri toplandığı andaki)
+                # Bu bilgiye sahip değiliz, bu yüzden bu adımı şimdilik atlıyoruz.
+                # Daha basit bir versiyon kullanalım: Sadece standart MSE kaybı.
+                # İleri seviye implementasyonlarda bu adım eklenir.
+                critic_loss = critic_loss_unclipped  # Şimdilik standart kayıp
 
-                # Kritik Güncellemesi
+                # --- 5. AĞLARI GÜNCELLE (GRADYAN KIRPMA İLE) ---
+                self.actor_optimizer.zero_grad()
+                actor_loss.backward()
+                # --- YENİ: Gradyan Kırpma (Gradient Clipping) ---
+                # Gradiyanların "patlamasını" ve politikayı bozmasını engeller.
+                torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
+                self.actor_optimizer.step()
+
                 self.critic_optimizer.zero_grad()
-                # 0.5 ile çarpmak yaygın bir pratiktir, iki loss'un büyüklüğünü dengeler.
                 (0.5 * critic_loss).backward()
+                # --- YENİ: Gradyan Kırpma (Gradient Clipping) ---
+                torch.nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
                 self.critic_optimizer.step()
 
-                # Kayıpları listeye ekle
                 actor_losses.append(actor_loss.item())
                 critic_losses.append(critic_loss.item())
+
+        return np.mean(actor_losses), np.mean(critic_losses), np.mean(std_devs)
 
         # Ortalama kayıpları ve std'yi geri döndür ---
         return np.mean(actor_losses), np.mean(critic_losses), np.mean(std_devs)

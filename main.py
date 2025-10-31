@@ -11,13 +11,23 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Kullanılan Cihaz: {device}")
 
 def main():
+    # --- Hiperparametreler ---
+    total_timesteps = 1000000  # Toplam eğitim adımı sayısı
+    learning_rate = 3e-4     # Öğrenme oranı
+    gamma = 0.99               # Gelecekteki ödülleri ne kadar önemseyeceğimizi belirleyen indirim faktörü
+    gae_lambda = 0.95          # GAE için lambda değeri (Avantaj hesaplamada kullanılır)
+    rollout_steps = 2048       # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
+    update_epochs = 4          # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
+    clip_ratio = 0.2           # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
+    batch_size = 64            # Her bir güncelleme adımında kullanılacak veri yığını boyutu
+    entropy_coef = 0.0         # Entropy coefficient
+
     # --- Deney Ayarları ---
-    load_model = False  # Kayıtlı modelden devam etmek için True yap
+    load_model = False
     experiment_name = "Ant-v5_PPO_1M_***"
-    base_experiment_name = "Ant-v5_PPO_1M"
+    base_experiment_name = "Ant-v5_PPO_Stable"
     run_name = f"{base_experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
-    # Klasörleri ve log dosyasını hazırla
     if not os.path.exists("./models"):
         os.makedirs("./models")
     if not os.path.exists("./runs"):
@@ -29,18 +39,6 @@ def main():
     def log_to_file(message):
         with open(log_file_path, 'a') as f:
             f.write(message + '\\n')
-
-    # --- Hiperparametreler ---
-    total_timesteps = 1000000  # Toplam eğitim adımı sayısı
-    learning_rate = 2.5e-4     # Öğrenme oranı
-    gamma = 0.99               # Gelecekteki ödülleri ne kadar önemseyeceğimizi belirleyen indirim faktörü
-    gae_lambda = 0.95          # GAE için lambda değeri (Avantaj hesaplamada kullanılır)
-    rollout_steps = 4096       # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
-    update_epochs = 10         # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
-    clip_ratio = 0.2           # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
-    batch_size = 64            # Her bir güncelleme adımında kullanılacak veri yığını boyutu
-    entropy_coef = 0.005       # Entropy coefficient
-    # -------------------------
 
     # 1. Ortamı Yükle
     env = gym.make('Ant-v5')
@@ -64,6 +62,13 @@ def main():
     agent = PPOAgent(state_dim, action_dim, max_action, learning_rate, gamma, gae_lambda, clip_ratio, device)
     agent.to(device)
 
+    def lr_lambda(step):
+        # total_timesteps'e ulaşıldığında öğrenme oranı 0 olacak şekilde lineer azalt
+        return max(0.0, 1.0 - (step / total_timesteps))
+
+    actor_scheduler = torch.optim.lr_scheduler.LambdaLR(agent.actor_optimizer, lr_lambda)
+    critic_scheduler = torch.optim.lr_scheduler.LambdaLR(agent.critic_optimizer, lr_lambda)
+
     if load_model:
         try:
             agent.load("models", experiment_name)
@@ -80,12 +85,6 @@ def main():
     # Loglama için
     current_episode_reward = 0
     episode_rewards_list = []
-
-    def lr_lambda(step):
-        return 1.0 - (step / total_timesteps)
-
-    actor_scheduler = torch.optim.lr_scheduler.LambdaLR(agent.actor_optimizer, lr_lambda)
-    critic_scheduler = torch.optim.lr_scheduler.LambdaLR(agent.critic_optimizer, lr_lambda)
 
     # Ana Eğitim Döngüsü
     while global_step_count < total_timesteps:
@@ -141,11 +140,11 @@ def main():
         critic_scheduler.step()
 
         # --- 4. TensorBoard'a Loglama ---
-        writer.add_scalar('charts/learning_rate', actor_scheduler.get_last_lr()[0], global_step_count)
         writer.add_scalar('losses/actor_loss', actor_loss, global_step_count)
         writer.add_scalar('losses/critic_loss', critic_loss, global_step_count)
         writer.add_scalar('charts/avg_reward_100_episodes', np.mean(episode_rewards_list[-100:]), global_step_count)
         writer.add_scalar('charts/exploration_std', avg_std, global_step_count)
+        writer.add_scalar('charts/learning_rate', actor_scheduler.get_last_lr()[0], global_step_count)
 
     agent.save("models", run_name)
     log_to_file("Eğitim tamamlandı ve modeller kaydedildi.")

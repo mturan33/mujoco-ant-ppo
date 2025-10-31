@@ -7,7 +7,7 @@ import time
 
 def test():
     # --- Ayarlar ---
-    model_name = "Ant-v5_PPO_1M_2025-10-30_16-42-19"  # Yüklemek istediğiniz modelin adı
+    model_name = "Ant-v5_PPO_Stable_2025-10-30_22-02-42"  # Yüklemek istediğiniz modelin adı
     num_episodes = 10  # Kaç bölüm test etmek istediğiniz
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -55,7 +55,7 @@ def test():
             total_reward += reward
 
             # Simülasyonu yavaşlatmak için
-            time.sleep(0.01)
+            time.sleep(0.05)
 
         print(f"Bölüm {i + 1} tamamlandı. Toplam Ödül: {total_reward:.2f}")
 
