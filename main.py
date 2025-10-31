@@ -17,15 +17,15 @@ def main():
     gamma = 0.99               # Gelecekteki ödülleri ne kadar önemseyeceğimizi belirleyen indirim faktörü
     gae_lambda = 0.95          # GAE için lambda değeri (Avantaj hesaplamada kullanılır)
     rollout_steps = 2048       # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
-    update_epochs = 4          # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
+    update_epochs = 10          # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
     clip_ratio = 0.2           # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
     batch_size = 64            # Her bir güncelleme adımında kullanılacak veri yığını boyutu
-    entropy_coef = 0.0         # Entropy coefficient
+    entropy_coef = 0.005       # Entropy coefficient
 
     # --- Deney Ayarları ---
     load_model = False
-    experiment_name = "Ant-v5_PPO_1M_***"
-    base_experiment_name = "Ant-v5_PPO_Stable"
+    experiment_name = "Ant-v5_PPO_T_***"
+    base_experiment_name = "Ant-v5_PPO_T"
     run_name = f"{base_experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
     if not os.path.exists("./models"):

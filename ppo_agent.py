@@ -35,7 +35,6 @@ class ActorNetwork(nn.Module):
         self.mean_layer = nn.Linear(256, action_dim)
         self.log_std_layer = nn.Linear(256, action_dim)
         self.max_action = max_action
-
         torch.nn.init.orthogonal_(self.layer_1.weight)
         torch.nn.init.orthogonal_(self.layer_2.weight)
         torch.nn.init.orthogonal_(self.mean_layer.weight, gain=0.01)
@@ -57,6 +56,9 @@ class CriticNetwork(nn.Module):
         self.layer_1 = nn.Linear(state_dim, 256)
         self.layer_2 = nn.Linear(256, 256)
         self.value_layer = nn.Linear(256, 1)
+        torch.nn.init.orthogonal_(self.layer_1.weight)
+        torch.nn.init.orthogonal_(self.layer_2.weight)
+        torch.nn.init.orthogonal_(self.value_layer.weight)
 
     def forward(self, state):
         x = torch.relu(self.layer_1(state))
@@ -198,18 +200,29 @@ class PPOAgent:
                                         surr2).mean() - entropy_coef * entropy_loss  # NOT: Entropiyi eksiye çektik, keşfi teşvik eder!
 
                 # --- 4. KRİTİK KAYBINI HESAPLA (DEĞER KIRPMA İLE) ---
-                new_values = self.critic(norm_batch_states)
+                new_values = self.critic(norm_batch_states).view(-1)
 
-                # Değer Fonksiyonu Kırpma (Value Clipping)
+                # --- YENİ: Değer Fonksiyonu Kırpma (Value Clipping) ---
                 # Kritik ağının tahminlerinin her güncellemede çok fazla değişmesini engeller.
                 # Bu, Aktör'ün istikrarına da yardımcı olur.
-                critic_loss_unclipped = nn.MSELoss()(new_values, batch_returns)
 
-                # Önceki değer tahminlerini al (veri toplandığı andaki)
-                # Bu bilgiye sahip değiliz, bu yüzden bu adımı şimdilik atlıyoruz.
-                # Daha basit bir versiyon kullanalım: Sadece standart MSE kaybı.
-                # İleri seviye implementasyonlarda bu adım eklenir.
-                critic_loss = critic_loss_unclipped  # Şimdilik standart kayıp
+                # 1. Önceki değerleri alıyoruz. Getiriler (returns) ve avantajlar (advantages)
+                # hesaplandığı andaki değerler, returns - advantages formülüyle elde edilebilir.
+                # Bu, kritik için "eski" bir tahmin oluşturur.
+                old_values = (batch_returns - batch_advantages).view(-1)
+
+                # 2. Değerleri, eski değerlerin etrafında küçük bir aralığa kırpıyoruz.
+                values_clipped = old_values + torch.clamp(
+                    new_values - old_values, -self.clip_ratio, self.clip_ratio
+                )
+
+                # 3. Kırpılmış ve kırpılmamış kayıpları hesaplıyoruz.
+                critic_loss_unclipped = nn.MSELoss()(new_values, batch_returns.view(-1))
+                critic_loss_clipped = nn.MSELoss()(values_clipped, batch_returns.view(-1))
+
+                # 4. İki kayıptan daha büyük olanı seçerek "en kötü durum" senaryosuna göre
+                # güncelleme yapıyoruz. Bu, güncellemeleri daha muhafazakar hale getirir.
+                critic_loss = torch.max(critic_loss_unclipped, critic_loss_clipped)
 
                 # --- 5. AĞLARI GÜNCELLE (GRADYAN KIRPMA İLE) ---
                 self.actor_optimizer.zero_grad()
@@ -227,8 +240,6 @@ class PPOAgent:
 
                 actor_losses.append(actor_loss.item())
                 critic_losses.append(critic_loss.item())
-
-        return np.mean(actor_losses), np.mean(critic_losses), np.mean(std_devs)
 
         # Ortalama kayıpları ve std'yi geri döndür ---
         return np.mean(actor_losses), np.mean(critic_losses), np.mean(std_devs)
