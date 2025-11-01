@@ -33,19 +33,25 @@ class ActorNetwork(nn.Module):
         self.layer_1 = nn.Linear(state_dim, 256)
         self.layer_2 = nn.Linear(256, 256)
         self.mean_layer = nn.Linear(256, action_dim)
-        self.log_std_layer = nn.Linear(256, action_dim)
         self.max_action = max_action
+
+        self.log_std = nn.Parameter(torch.zeros(1, action_dim))
+
         torch.nn.init.orthogonal_(self.layer_1.weight)
         torch.nn.init.orthogonal_(self.layer_2.weight)
         torch.nn.init.orthogonal_(self.mean_layer.weight, gain=0.01)
-        torch.nn.init.orthogonal_(self.log_std_layer.weight, gain=0.01)
+
 
     def forward(self, state):
-        x = torch.relu(self.layer_1(state))
-        x = torch.relu(self.layer_2(x))
+        x = torch.tanh(self.layer_1(state))
+        x = torch.tanh(self.layer_2(x))
         mean = self.max_action * torch.tanh(self.mean_layer(x))
-        log_std = self.log_std_layer(x)
-        log_std = torch.clamp(log_std, min=-20, max=2)
+
+        log_std = torch.clamp(self.log_std, -5, 2) # min=-5, max=2
+
+        # log_std'yi batch boyutuna uyacak şekilde genişletiyoruz.
+        log_std = log_std.expand_as(mean)
+
         std = torch.exp(log_std)
         dist = Normal(mean, std)
         return dist
@@ -61,8 +67,8 @@ class CriticNetwork(nn.Module):
         torch.nn.init.orthogonal_(self.value_layer.weight)
 
     def forward(self, state):
-        x = torch.relu(self.layer_1(state))
-        x = torch.relu(self.layer_2(x))
+        x = torch.tanh(self.layer_1(state))
+        x = torch.tanh(self.layer_2(x))
         value = self.value_layer(x)
         return value
 
@@ -164,6 +170,8 @@ class PPOAgent:
 
         # Her bir güncelleme döngüsü (epoch) için
         for _ in range(num_epochs):
+            returns = (returns - returns.mean()) / (returns.std() + 1e-8)
+
             num_samples = len(states)
             indices = np.arange(num_samples)
             np.random.shuffle(indices)

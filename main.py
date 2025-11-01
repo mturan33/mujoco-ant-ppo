@@ -12,15 +12,15 @@ print(f"Kullanılan Cihaz: {device}")
 
 def main():
     # --- Hiperparametreler ---
-    total_timesteps = 1000000  # Toplam eğitim adımı sayısı
-    learning_rate = 3e-4     # Öğrenme oranı
+    total_timesteps = 3000000  # Toplam eğitim adımı sayısı
+    learning_rate = 1e-4       # Öğrenme oranı
     gamma = 0.99               # Gelecekteki ödülleri ne kadar önemseyeceğimizi belirleyen indirim faktörü
     gae_lambda = 0.95          # GAE için lambda değeri (Avantaj hesaplamada kullanılır)
-    rollout_steps = 2048       # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
-    update_epochs = 10          # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
-    clip_ratio = 0.2           # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
-    batch_size = 64            # Her bir güncelleme adımında kullanılacak veri yığını boyutu
-    entropy_coef = 0.005       # Entropy coefficient
+    rollout_steps = 4096       # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
+    update_epochs = 16         # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
+    clip_ratio = 0.15          # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
+    batch_size = 512           # Her bir güncelleme adımında kullanılacak veri yığını boyutu
+    entropy_coef = 0.01        # Entropy coefficient
 
     # --- Deney Ayarları ---
     load_model = False
