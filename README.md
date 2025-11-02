@@ -82,8 +82,20 @@ python test_agent.py
 ```
 - Before running, make sure to update the `model_name` variable inside `test_agent.py` to match the name of the model you want to test (located in the `models` folder).
 
-## Future Work
+## 📊 Results
+- Final reward: 6000+
+- Training time: 3 hours (RTX 5070 Ti)
+- [TensorBoard]<img width="1795" height="942" alt="Ekran görüntüsü 2025-11-02 184621" src="https://github.com/user-attachments/assets/32d59e5a-d145-43dd-bac1-10f365d35855" />
 
+## 🧠 Key Concepts Learned
+- GAE (Generalized Advantage Estimation)
+- Observation normalization
+- Entropy regularization
+
+## 🔗 Next Steps
+→ Isaac Sim Quadruped Project
+
+## Future Work
 - [ ] Implement Soft Actor-Critic (SAC) from scratch and compare its performance with PPO.
 - [ ] Design more complex environments with obstacles and uneven terrain.
 - [ ] Incorporate camera data into the agent's observation space to explore Vision-based RL.
