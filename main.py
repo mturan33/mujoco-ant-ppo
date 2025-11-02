@@ -12,15 +12,17 @@ print(f"Kullanılan Cihaz: {device}")
 
 def main():
     # --- Hiperparametreler ---
-    total_timesteps = 3000000  # Toplam eğitim adımı sayısı
-    learning_rate = 1e-4       # Öğrenme oranı
-    gamma = 0.99               # Gelecekteki ödülleri ne kadar önemseyeceğimizi belirleyen indirim faktörü
-    gae_lambda = 0.95          # GAE için lambda değeri (Avantaj hesaplamada kullanılır)
-    rollout_steps = 4096       # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
-    update_epochs = 16         # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
-    clip_ratio = 0.15          # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
-    batch_size = 512           # Her bir güncelleme adımında kullanılacak veri yığını boyutu
-    entropy_coef = 0.01        # Entropy coefficient
+    total_timesteps = 6000000   # Toplam eğitim adımı sayısı
+    # learning_rate = 3e-4      # Öğrenme oranı
+    actor_learning_rate = 3e-4  # Aktör öğrenme oranı
+    critic_learning_rate = 3e-4 # Kritik için daha düşük bir öğrenme oranı
+    gamma = 0.99                # Gelecekteki ödülleri ne kadar önemseyeceğimizi belirleyen indirim faktörü
+    gae_lambda = 0.95           # GAE için lambda değeri (Avantaj hesaplamada kullanılır)
+    rollout_steps = 2048        # Her bir güncelleme öncesi toplanacak veri (adım) sayısı
+    update_epochs = 1           # Toplanan veri ile sinir ağlarının kaç defa güncelleneceği
+    clip_ratio = 0.2            # PPO'nun "clipped" kayıp fonksiyonu için kırpma oranı
+    batch_size = 64             # Her bir güncelleme adımında kullanılacak veri yığını boyutu
+    entropy_coef = 0.01         # Entropy coefficient
 
     # --- Deney Ayarları ---
     load_model = False
@@ -50,6 +52,7 @@ def main():
     # Eylem uzayının boyutu (action_dim)
     action_dim = env.action_space.shape[0]
 
+
     # Eylemlerin alabileceği maksimum değer (genellikle 1.0)
     # Tork değerleri genellikle -max_action ile +max_action arasındadır.
     max_action = float(env.action_space.high[0])
@@ -59,7 +62,7 @@ def main():
     print(f"Max Action Value: {max_action}")
 
     # 3. Aktör ve Kritik Ağlarını Oluştur
-    agent = PPOAgent(state_dim, action_dim, max_action, learning_rate, gamma, gae_lambda, clip_ratio, device)
+    agent = PPOAgent(state_dim, action_dim, max_action, actor_learning_rate, critic_learning_rate, gamma, gae_lambda, clip_ratio, device)
     agent.to(device)
 
     def lr_lambda(step):

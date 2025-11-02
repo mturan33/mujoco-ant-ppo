@@ -30,9 +30,9 @@ class RunningMeanStd:
 class ActorNetwork(nn.Module):
     def __init__(self, state_dim, action_dim, max_action):
         super(ActorNetwork, self).__init__()
-        self.layer_1 = nn.Linear(state_dim, 256)
-        self.layer_2 = nn.Linear(256, 256)
-        self.mean_layer = nn.Linear(256, action_dim)
+        self.layer_1 = nn.Linear(state_dim, 64)
+        self.layer_2 = nn.Linear(64, 64)
+        self.mean_layer = nn.Linear(64, action_dim)
         self.max_action = max_action
 
         self.log_std = nn.Parameter(torch.zeros(1, action_dim))
@@ -59,9 +59,9 @@ class ActorNetwork(nn.Module):
 class CriticNetwork(nn.Module):
     def __init__(self, state_dim):
         super(CriticNetwork, self).__init__()
-        self.layer_1 = nn.Linear(state_dim, 256)
-        self.layer_2 = nn.Linear(256, 256)
-        self.value_layer = nn.Linear(256, 1)
+        self.layer_1 = nn.Linear(state_dim, 64)
+        self.layer_2 = nn.Linear(64, 64)
+        self.value_layer = nn.Linear(64, 1)
         torch.nn.init.orthogonal_(self.layer_1.weight)
         torch.nn.init.orthogonal_(self.layer_2.weight)
         torch.nn.init.orthogonal_(self.value_layer.weight)
@@ -75,7 +75,7 @@ class CriticNetwork(nn.Module):
 
 # PPO Ajan Sınıfı ağları, optimizer'ları ve öğrenme mantığını bir araya getiriyor.
 class PPOAgent:
-    def __init__(self, state_dim, action_dim, max_action, lr, gamma, gae_lambda, clip_ratio, device):
+    def __init__(self, state_dim, action_dim, max_action, actor_lr, critic_lr, gamma, gae_lambda, clip_ratio, device):
         self.gamma = gamma
         self.gae_lambda = gae_lambda
         self.clip_ratio = clip_ratio
@@ -85,8 +85,8 @@ class PPOAgent:
         self.critic = CriticNetwork(state_dim)
 
         # Optimizer'ları oluştur
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=lr)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=lr)
+        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr, weight_decay=0.001)
 
         self.obs_rms = RunningMeanStd(shape=(state_dim,), device=device)
 
