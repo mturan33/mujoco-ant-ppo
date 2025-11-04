@@ -237,8 +237,16 @@ class PPOAgent:
     def learn(self, states, actions, log_probs, returns, advantages, num_epochs, batch_size, entropy_coef):
         device = returns.device
         states = torch.tensor(np.array(states), dtype=torch.float32).to(device)
-        actions = torch.cat(actions, dim=0)
-        old_log_probs = torch.cat(log_probs, dim=0)
+
+        # Paralel env desteği: Eğer zaten tensor ise cat yapma!
+        if isinstance(actions, list):
+            actions = torch.cat(actions, dim=0)
+        # Eğer zaten tensor ise (paralel env), olduğu gibi kullan
+
+        if isinstance(log_probs, list):
+            old_log_probs = torch.cat(log_probs, dim=0)
+        else:
+            old_log_probs = log_probs
 
         # Observation normalization güncelle
         self.obs_rms.update(states)

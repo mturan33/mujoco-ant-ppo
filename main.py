@@ -1,15 +1,34 @@
 """
-FINAL MAIN.PY - ENERGY EFFICIENT ANT
-======================================
+FINAL MAIN.PY - STABLE WALKING ANT (NO HOPPING!)
+=================================================
 
-YENI İYİLEŞTİRMELER:
-1. ✅ Energy Efficiency Penalty (action magnitude)
-2. ✅ Action Smoothness Penalty (jerk/ani değişim)
-3. ✅ Critic LR düşürüldü (1e-3 → 3e-4)
-4. ✅ Entropy coef düşürüldü (0.02 → 0.01)
-5. ✅ Total timesteps 5M (15M değil, zaten plateau)
+ZIPLAMA PROBLEMİ FİX EDİLDİ! ✅
 
-HEDEF: Pürüzsüz, energy-efficient yürüme (zıplama yok!)
+ÖNCEKİ SORUN:
+- Agent "reward hacking" yapıyordu
+- Zıplayarak hem forward velocity hem height bonus alıyordu
+- Energy/jerk penalty'ler çok zayıftı
+
+YENİ DEĞİŞİKLİKLER:
+1. ✅ Stability-Aware Height Bonus
+   - Sadece stabil yükseklikte ise bonus (zıplama = 0 bonus!)
+
+2. ✅ Stability-Aware Forward Bonus
+   - Stabil ilerleme: 1.2x bonus
+   - Zıplama: 0.3x bonus (caydırıcı!)
+
+3. ✅ Aggressive Penalties
+   - Energy: 0.01 → 0.05 (5x daha güçlü!)
+   - Jerk: 0.05 → 0.2 (4x daha güçlü!)
+
+4. ✅ Total Timesteps: 4M
+   - İlk 1M: Eski behavior'dan kurtulma
+   - 2-3M: Yeni reward'a adapte
+   - 3-4M: Convergence
+
+5. ✅ Target Reward: 1500 (gerçekçi)
+
+HEDEF: Düzgün, stabil, energy-efficient yürüme! 🚀
 """
 
 import gymnasium as gym
@@ -29,7 +48,7 @@ def main():
     # HİPERPARAMETRELER - OPTİMİZE EDİLDİ
     # ========================================
 
-    total_timesteps = 5_000_000  # YENİ: 15M → 5M (zaten plateau olmuştu)
+    total_timesteps = 10_000_000  # FİNAL: 4M (zıplama fix + convergence)
 
     # Learning rates
     actor_learning_rate = 3e-4
@@ -47,21 +66,21 @@ def main():
     # Checkpoint ayarları
     save_freq = 500_000
     eval_freq = 100_000
-    target_reward = 2200  # YENİ: 6000 → 2200 (gerçekçi hedef)
+    target_reward = 1500  # GÜNCEL: Yeni reward shaping ile gerçekçi hedef
 
     # ========================================
     # YENİ: ENERGY EFFICIENCY AYARLARI
     # ========================================
 
     # Action magnitude penalty (enerji tasarrufu)
-    action_penalty_coef = 0.01  # Küçük penalty
+    action_penalty_coef = 0.05  # ARTTIRILDI: 0.01 → 0.05 (zıplama önleme!)
 
     # Action smoothness penalty (pürüzsüz hareket)
-    jerk_penalty_coef = 0.05  # Orta penalty
+    jerk_penalty_coef = 0.2  # ARTTIRILDI: 0.05 → 0.2 (zıplama önleme!)
 
     # Deney ayarları
     load_model = False
-    experiment_name = "Ant-v5_PPO_ENERGY_EFFICIENT"  # YENİ İSİM
+    experiment_name = "Ant-v5_PPO_FINAL_STABLE"  # FİNAL: Zıplama fix!
     run_name = f"{experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
     if not os.path.exists("./models"):
@@ -143,28 +162,41 @@ def main():
             done = terminated or truncated
 
             # ========================================
-            # YENİ: ENERGY-EFFICIENT REWARD SHAPING
+            # YENİ: STABILITY-AWARE REWARD SHAPING (ZIPLAMA FİX!)
             # ========================================
 
             # 1. Orijinal reward
             base_reward = reward
 
-            # 2. Ayakta kalma bonusu (değişiklik yok)
+            # 2. Stability check (yükseklik değişimi)
             torso_height = next_state[0]
-            height_bonus = 1.0 if torso_height > 0.3 else -2.0
+            previous_height = state[0]
+            height_change = abs(torso_height - previous_height)
 
-            # 3. İlerleme bonusu (değişiklik yok)
+            # Stability threshold: 0.05 (zıplarken 0.1+ değişir!)
+            is_stable = height_change < 0.05
+
+            # 3. Height bonus (sadece stabil + yüksek ise)
+            if is_stable and torso_height > 0.3:
+                height_bonus = 1.5  # Stabil yürüme ÖDÜL!
+            elif torso_height > 0.3:
+                height_bonus = 0.0  # Yüksek ama stabil değil (zıplıyor)
+            else:
+                height_bonus = -2.0  # Düşük = kötü
+
+            # 4. Forward velocity bonus (sadece stabil hareket)
             forward_velocity = info.get('x_velocity', 0)
-            forward_bonus = forward_velocity * 1.0
+            if is_stable:
+                forward_bonus = forward_velocity * 1.2  # Stabil ilerleme ÖDÜL!
+            else:
+                forward_bonus = forward_velocity * 0.3  # Zıplama = az bonus
 
-            # 4. YENİ: Energy efficiency penalty
-            # Küçük action'lar = az enerji = iyi
+            # 5. Energy efficiency penalty
             action_np = action.cpu().numpy().flatten()
             action_magnitude = np.sum(np.square(action_np))
             energy_penalty = -action_penalty_coef * action_magnitude
 
-            # 5. YENİ: Action smoothness penalty (jerk)
-            # Ani değişimler = kötü (zıplama, titreme)
+            # 6. Action smoothness penalty (jerk)
             action_diff = np.abs(action_np - previous_action)
             jerk_magnitude = np.sum(action_diff)
             jerk_penalty = -jerk_penalty_coef * jerk_magnitude

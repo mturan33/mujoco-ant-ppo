@@ -1,0 +1,13 @@
+[INFO] Creating 8 parallel environments...
+[INFO] State Dimension: 105
+[INFO] Action Dimension: 8
+[INFO] Max Action Value: 1.0
+[INFO] Total Timesteps: 8,000,000
+[INFO] Parallel Envs: 8
+[INFO] Expected Speedup: 8x (from 8 hours to ~1 hour!)
+[INFO] Energy Penalties: action=0.05, jerk=0.2
+
+============================================================
+[START] PARALLEL TRAINING STARTED
+============================================================
+
