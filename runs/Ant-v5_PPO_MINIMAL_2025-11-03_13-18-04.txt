@@ -1,0 +1,21 @@
+[INFO] State Dimension: 105
+[INFO] Action Dimension: 8
+[INFO] Max Action Value: 1.0
+[INFO] Total Timesteps: 15,000,000
+[WARNING] MINIMAL MODE - Original reward + small healthy bonus!
+
+============================================================
+[START] MINIMAL TRAINING STARTED
+============================================================
+
+[EPISODE 1] Step: 57 | Reward: -27.11 | Avg-100: -27.11
+[EPISODE 2] Step: 77 | Reward: -15.52 | Avg-100: -21.32
+[EPISODE 3] Step: 142 | Reward: -76.14 | Avg-100: -39.59
+[EPISODE 4] Step: 198 | Reward: -40.67 | Avg-100: -39.86
+[EPISODE 5] Step: 331 | Reward: -107.44 | Avg-100: -53.38
+[EPISODE 6] Step: 413 | Reward: -22.69 | Avg-100: -48.26
+[EPISODE 7] Step: 555 | Reward: -126.39 | Avg-100: -59.42
+[EPISODE 8] Step: 1,555 | Reward: -566.09 | Avg-100: -122.76
+[EPISODE 9] Step: 1,577 | Reward: -25.85 | Avg-100: -111.99
+[EPISODE 10] Step: 1,709 | Reward: -76.13 | Avg-100: -108.40
+[EPISODE 11] Step: 1,761 | Reward: -32.44 | Avg-100: -101.50
