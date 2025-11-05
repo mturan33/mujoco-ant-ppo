@@ -1,19 +1,35 @@
 """
-FIXED: 8M PARALLEL TRAINING - SRALAMA HATASI DÜZELTİLDİ!
-=========================================================
+ANTI-HOPPING ANT - HEIGHT STABILITY PENALTY! 🚀
+================================================
 
-BUG FİX: State ve advantage sıralaması artık uyumlu!
+SORUN BULUNDU:
+- Vanilla Ant-v5 reward yeterli değilmiş!
+- contact_cost = 5e-4 (çok zayıf!)
+- Agent zıplamayı öğreniyor (daha hızlı = daha fazla reward)
 
-ÖNCEK SORUN:
-- flat_states: s0_e0, s0_e1, ..., s0_e7, s1_e0, ... (step-major)
-- advantages: e0_s0, e0_s1, ..., e0_s2047, e1_s0, ... (env-major)
-- UYUŞMUYORDU! ❌
+ÇÖZÜM: HEIGHT STABILITY PENALTY (Minimal & Effective!)
+- Sadece 1 penalty: Height variance
+- Zıplama = Height çok değişir = Yüksek penalty!
+- Düzgün yürüme = Height stabil = Düşük penalty!
 
-YENİ FİX:
-- Her şey env-major sıralamada!
-- e0_s0, e0_s1, ..., e0_s2047, e1_s0, e1_s1, ... ✅
+```python
+height_variance = abs(current_height - previous_height)
+penalty = -5.0 * height_variance
 
-24 ENV İLE 8M STEP = ~30 DAKİKA!
+# Zıplama: variance=0.3 → penalty=-1.5
+# Normal: variance=0.02 → penalty=-0.1
+```
+
+NEDEN BU ÇALIŞIR?
+- Basit (1 penalty!)
+- Direkt zıplamayı hedefler
+- Base reward'ı boğmaz
+- Agent kafası karışmaz
+
+BEKLENEN:
+- Süre: ~5-6 saat (aynı)
+- Reward: +2000-2500 (biraz düşük, ama stabil!)
+- YÜRÜME: Pürüzsüz, zıplama yok! ✅
 """
 
 import gymnasium as gym
@@ -23,7 +39,7 @@ import numpy as np
 import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv  # SubprocVecEnv yerine!
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"[DEVICE] Using: {device}")
@@ -40,17 +56,17 @@ def make_env(rank):
 
 def main():
     # ========================================
-    # PARAMETERS
+    # PARAMETERS (OPTIMIZED!)
     # ========================================
 
     total_timesteps = 8_000_000
-    num_envs = 24  # 32 core için optimal!
+    num_envs = 16
 
     actor_learning_rate = 3e-4
     critic_learning_rate = 3e-4
     gamma = 0.99
     gae_lambda = 0.95
-    rollout_steps = 2048
+    rollout_steps = 512  # Aynı (2048 çok uzun)
     update_epochs = 10
     clip_ratio = 0.2
     batch_size = 64
@@ -59,11 +75,8 @@ def main():
     save_freq = 500_000
     eval_freq = 100_000
 
-    action_penalty_coef = 0.05
-    jerk_penalty_coef = 0.2
-
     load_model = False
-    experiment_name = f"Ant-v5_PPO_PARALLEL_FIXED_{num_envs}envs"
+    experiment_name = f"Ant-v5_PPO_ANTIHOPPING_{num_envs}envs"
     run_name = f"{experiment_name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
     if not os.path.exists("./models"):
@@ -80,11 +93,14 @@ def main():
         print(message)
 
     # ========================================
-    # PARALLEL ENVIRONMENTS
+    # PARALLEL ENVIRONMENTS (DummyVecEnv!)
     # ========================================
 
     log_to_file(f"[INFO] Creating {num_envs} parallel environments...")
-    env = SubprocVecEnv([make_env(i) for i in range(num_envs)])
+    log_to_file(f"[INFO] Using DummyVecEnv (no IPC overhead!)")
+
+    # DummyVecEnv: Single process, sequential
+    env = DummyVecEnv([make_env(i) for i in range(num_envs)])
 
     temp_env = gym.make('Ant-v5')
     state_dim = temp_env.observation_space.shape[0]
@@ -95,10 +111,13 @@ def main():
     log_to_file(f"[INFO] State Dimension: {state_dim}")
     log_to_file(f"[INFO] Action Dimension: {action_dim}")
     log_to_file(f"[INFO] Parallel Envs: {num_envs}")
-    log_to_file(f"[INFO] Expected Time: ~30 minutes for 8M steps!")
+    log_to_file(f"[INFO] Rollout Steps: {rollout_steps}")
+    log_to_file(f"[INFO] Expected Time: ~30-35 minutes for 8M steps!")
+    log_to_file(f"[INFO] HEIGHT STABILITY PENALTY MODE!")
+    log_to_file(f"[INFO] Penalty Coefficient: 5.0 (strong anti-hopping!)")
 
     # ========================================
-    # AGENT
+    # AGENT (REWARD NORMALIZATION KAPALI!)
     # ========================================
 
     agent = PPOAgent(
@@ -107,6 +126,9 @@ def main():
         gamma, gae_lambda, clip_ratio, device
     )
     agent.to(device)
+
+    # Reward normalization KAPAT! (hızlanma)
+    agent.normalize_rewards = False
 
     def lr_lambda(step):
         return max(0.5, 1.0 - (step / total_timesteps))
@@ -131,16 +153,22 @@ def main():
     episode_rewards_list = []
     episode_count = 0
     best_avg_reward = -np.inf
-    previous_actions = np.zeros((num_envs, action_dim))
 
-    log_to_file(f"\n{'=' * 60}\n[START] FIXED PARALLEL TRAINING\n{'=' * 60}\n")
+    # Height stability tracking
+    previous_heights = np.array([states[i][0] for i in range(num_envs)])  # Height = state[0]
+    height_stability_coef = 8.0  # Strong penalty!
+
+    log_to_file(f"\n{'=' * 60}\n[START] ANTI-HOPPING TRAINING (Height Stability Penalty!)\n{'=' * 60}\n")
+
+    import time
+    start_time = time.time()
+    last_log_time = start_time
 
     while global_step_count < total_timesteps:
         # ========================================
-        # ROLLOUT (ENV-MAJOR ORDER!)
+        # ROLLOUT (VANILLA - NO REWARD SHAPING!)
         # ========================================
 
-        # Her env için ayrı liste (env-major!)
         env_states = [[] for _ in range(num_envs)]
         env_actions = [[] for _ in range(num_envs)]
         env_log_probs = [[] for _ in range(num_envs)]
@@ -151,7 +179,6 @@ def main():
         for step in range(rollout_steps):
             global_step_count += num_envs
 
-            # Get actions (paralel)
             with torch.no_grad():
                 actions_list, log_probs_list, values_list = [], [], []
                 for i in range(num_envs):
@@ -168,91 +195,72 @@ def main():
             next_states, base_rewards, dones, infos = env.step(actions_np)
 
             # ========================================
-            # REWARD SHAPING (Her env için)
+            # HEIGHT STABILITY PENALTY!
             # ========================================
 
-            shaped_rewards = np.zeros(num_envs)
+            # Base reward from Ant-v5
+            shaped_rewards = base_rewards.copy()
 
+            # Add height stability penalty
             for i in range(num_envs):
-                # Ant-v5 state index kontrol et!
-                # State[0] = z-coordinate (height) olmalı
-                # Eğer state_dim = 111 ise, State[0] = x, State[2] = z
-                # Eğer exclude_current_positions_from_observation=True ise State[0] = z
+                current_height = next_states[i][0]  # Height = state[0]
+                height_variance = abs(current_height - previous_heights[i])
 
-                # Ant-v5 default: exclude_current_positions_from_observation=True
-                # O yüzden State[0] = z-coordinate ✅
+                # Penalty: Zıplama = Yüksek variance = Büyük ceza!
+                height_penalty = -height_stability_coef * height_variance
 
-                torso_height = next_states[i][0]
-                previous_height = states[i][0]
-                height_change = abs(torso_height - previous_height)
-                is_stable = height_change < 0.05
+                shaped_rewards[i] += height_penalty
 
-                if is_stable and torso_height > 0.3:
-                    height_bonus = 1.5
-                elif torso_height > 0.3:
-                    height_bonus = 0.0
+                # Update previous height
+                if not dones[i]:  # Reset only on done
+                    previous_heights[i] = current_height
                 else:
-                    height_bonus = -2.0
+                    previous_heights[i] = next_states[i][0]  # Reset to new episode start
 
-                # Forward velocity (Ant-v5 info'dan)
-                forward_velocity = infos[i].get('x_velocity', 0)
-                if is_stable:
-                    forward_bonus = forward_velocity * 1.2
-                else:
-                    forward_bonus = forward_velocity * 0.3
-
-                # Energy penalty
-                action_magnitude = np.sum(np.square(actions_np[i]))
-                energy_penalty = -action_penalty_coef * action_magnitude
-
-                # Jerk penalty
-                action_diff = np.abs(actions_np[i] - previous_actions[i])
-                jerk_magnitude = np.sum(action_diff)
-                jerk_penalty = -jerk_penalty_coef * jerk_magnitude
-
-                shaped_rewards[i] = (
-                    base_rewards[i] + height_bonus + forward_bonus +
-                    energy_penalty + jerk_penalty
-                )
-
-                previous_actions[i] = actions_np[i].copy()
+            # Episode tracking
+            for i in range(num_envs):
                 episode_rewards[i] += base_rewards[i]
 
-                # Episode bitişi
                 if dones[i]:
                     episode_rewards_list.append(episode_rewards[i])
                     episode_count += 1
 
                     if len(episode_rewards_list) >= 100:
                         avg_reward = np.mean(episode_rewards_list[-100:])
+
+                        # Hız hesaplama
+                        current_time = time.time()
+                        elapsed = current_time - last_log_time
+                        steps_per_sec = eval_freq / elapsed if elapsed > 0 else 0
+
                         log_to_file(
                             f"[EPISODE {episode_count}] "
                             f"Step: {global_step_count:,} | "
                             f"Reward: {episode_rewards[i]:.2f} | "
-                            f"Avg-100: {avg_reward:.2f}"
+                            f"Avg-100: {avg_reward:.2f} | "
+                            f"Speed: {steps_per_sec:.0f} steps/s"
                         )
                         writer.add_scalar('episode/reward', episode_rewards[i], global_step_count)
                         writer.add_scalar('episode/avg_reward_100', avg_reward, global_step_count)
+                        writer.add_scalar('performance/steps_per_second', steps_per_sec, global_step_count)
+
+                        last_log_time = current_time
 
                     episode_rewards[i] = 0
-                    previous_actions[i] = np.zeros(action_dim)
-
-            # Normalize rewards
-            normalized_rewards = np.array([agent.normalize_reward(r) for r in shaped_rewards])
 
             # Store data (ENV-MAJOR ORDER!)
             for i in range(num_envs):
                 env_states[i].append(states[i])
                 env_actions[i].append(actions_list[i])
                 env_log_probs[i].append(log_probs_list[i])
-                env_rewards[i].append(normalized_rewards[i])
+                env_rewards[i].append(shaped_rewards[i])  # Use shaped rewards!
                 env_dones[i].append(dones[i])
                 env_values[i].append(values_list[i])
 
             states = next_states
 
         # ========================================
-        # ADVANTAGE COMPUTATION (ENV-MAJOR!)
+        # ADVANTAGE COMPUTATION
         # ========================================
 
         with torch.no_grad():
@@ -268,25 +276,21 @@ def main():
                 next_values.append(next_value)
             next_values = torch.cat(next_values, dim=0)
 
-        # Her env için advantage hesapla ve FLATTEN (env-major!)
         all_states, all_actions, all_log_probs = [], [], []
         all_advantages, all_returns = [], []
 
         for i in range(num_envs):
-            # Bu env'in tüm rollout'u
             advantages, returns = agent.compute_advantages(
-                env_rewards[i], env_dones[i], env_values[i], next_values[i]
+                env_rewards[i], env_dones[i], env_values[i], next_values[i:i+1]
             )
 
-            # ENV-MAJOR sırayla ekle!
-            all_states.extend(env_states[i])  # e0_s0, e0_s1, ..., e0_s2047
+            all_states.extend(env_states[i])
             all_actions.extend(env_actions[i])
             all_log_probs.extend(env_log_probs[i])
             all_advantages.append(advantages)
             all_returns.append(returns)
 
-        # Convert to tensors
-        flat_states = np.array(all_states)  # (num_envs*rollout_steps, state_dim)
+        flat_states = np.array(all_states)
         flat_actions = torch.cat(all_actions, dim=0)
         flat_log_probs = torch.cat(all_log_probs, dim=0)
         advantages = torch.cat(all_advantages, dim=0)
@@ -332,12 +336,17 @@ def main():
 
         if global_step_count % eval_freq == 0:
             progress = (global_step_count / total_timesteps) * 100
+            elapsed_total = time.time() - start_time
+            remaining = (elapsed_total / global_step_count) * (total_timesteps - global_step_count)
+
             if len(episode_rewards_list) >= 100:
                 recent_avg = np.mean(episode_rewards_list[-100:])
                 log_to_file(
                     f"\n[PROGRESS REPORT]\n"
                     f"   Steps: {global_step_count:,} / {total_timesteps:,} ({progress:.1f}%)\n"
                     f"   Avg Reward (last 100): {recent_avg:.2f}\n"
+                    f"   Elapsed: {elapsed_total/60:.1f} min\n"
+                    f"   Remaining: {remaining/60:.1f} min\n"
                     f"   Actor Loss: {actor_loss:.4f}\n"
                     f"   Critic Loss: {critic_loss:.4f}\n"
                     f"   Exploration Std: {avg_std:.4f}\n"
@@ -347,8 +356,10 @@ def main():
     # FINISH
     # ========================================
 
+    total_time = time.time() - start_time
     agent.save("models", f"{run_name}_FINAL")
-    log_to_file(f"\n[COMPLETE] FIXED PARALLEL TRAINING FINISHED!")
+    log_to_file(f"\n[COMPLETE] ANTI-HOPPING TRAINING FINISHED!")
+    log_to_file(f"Total Time: {total_time/60:.1f} minutes")
 
     if len(episode_rewards_list) >= 100:
         log_to_file(f"Final Avg Reward: {np.mean(episode_rewards_list[-100:]):.2f}")

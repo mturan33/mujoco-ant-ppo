@@ -1,0 +1,14 @@
+[INFO] Creating 16 parallel environments...
+[INFO] Using DummyVecEnv (no IPC overhead!)
+[INFO] State Dimension: 105
+[INFO] Action Dimension: 8
+[INFO] Parallel Envs: 16
+[INFO] Rollout Steps: 512
+[INFO] Expected Time: ~30-35 minutes for 8M steps!
+[INFO] HEIGHT STABILITY PENALTY MODE!
+[INFO] Penalty Coefficient: 5.0 (strong anti-hopping!)
+
+============================================================
+[START] ANTI-HOPPING TRAINING (Height Stability Penalty!)
+============================================================
+

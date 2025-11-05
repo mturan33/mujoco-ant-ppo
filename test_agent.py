@@ -8,7 +8,7 @@ import numpy as np
 def test():
     # --- Ayarlar ---
     # En son eğittiğiniz modelin adını buraya yazın
-    model_name = "Ant-v5_PPO_ENERGY_EFFICIENT_2025-11-04_14-23-01_BEST"  # BEST model'i kullan
+    model_name = "Ant-v5_PPO_OPTIMIZED_12envs_2025-11-05_12-05-21_BEST"  # BEST model'i kullan
     num_episodes = 10  # Kaç bölüm test edilecek
     render_speed = 0.02  # Render hızı (saniye)
 
@@ -84,7 +84,7 @@ def test():
 
             # Render'ı yavaşlat
             time.sleep(render_speed)
-            time.sleep(0.1)
+            time.sleep(0.05)
 
         episode_rewards.append(total_reward)
         print(f"[EPISODE {episode_idx + 1}/{num_episodes}] "
