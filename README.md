@@ -11,7 +11,12 @@ A from-scratch implementation of Proximal Policy Optimization (PPO) for training
 
 ## Demo: 2x2 Model Comparison
 
-https://github.com/mturan33/mujoco-ant-ppo/assets/demo_2x2.mp4
+![Demo](assets/demo_2x2.gif)
+
+<details>
+<summary>Full quality video</summary>
+[demo_2x2.mp4](https://github.com/mturan33/mujoco-ant-ppo/releases/download/v1.0/demo_2x2.mp4)
+</details>
 
 *Four trained models running simultaneously: Vanilla BEST (2739), Anti-Hopping (2531), Learning Phase (1828), and Energy Efficient (1261)*
 
