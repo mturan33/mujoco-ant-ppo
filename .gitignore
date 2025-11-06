@@ -24,16 +24,16 @@ build/
 
 # Jupyter Notebook
 .ipynb_checkpoints/
-*.ipynb  # Optional: remove if you have cleaned notebooks to share
+*.ipynb
 
-# Trained Models (too large for git)
+# Trained Models
 models/*.pth
 models/*.pt
 models/*.pkl
 models/*.h5
 *.ckpt
 
-# TensorBoard Logs (regeneratable)
+# TensorBoard Logs
 runs/
 logs/
 tensorboard/
@@ -45,15 +45,14 @@ results/
 output/
 
 # Videos and Large Media
-*.mp4
 *.avi
 *.mov
-*.gif  # Unless you want to commit demo GIFs
+*.gif
 
 # Data
 data/
 datasets/
-*.csv  # Unless needed for repo
+*.csv 
 *.xlsx
 *.h5
 
