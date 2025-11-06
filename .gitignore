@@ -47,7 +47,6 @@ output/
 # Videos and Large Media
 *.avi
 *.mov
-*.gif
 
 # Data
 data/
