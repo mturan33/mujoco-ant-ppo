@@ -1,3 +1,11 @@
+"""
+PPO Agent Testing Script
+========================
+
+Tests a trained PPO agent in the Ant-v5 environment with visualization.
+Evaluates agent performance over multiple episodes.
+"""
+
 import gymnasium as gym
 import torch
 from ppo_agent import PPOAgent
@@ -6,16 +14,17 @@ import numpy as np
 
 
 def test():
-    # --- Ayarlar ---
-    # En son eğittiğiniz modelin adını buraya yazın
-    model_name = "Ant-v5_PPO_OPTIMIZED_12envs_2025-11-05_12-05-21_BEST"  # BEST model'i kullan
-    num_episodes = 10  # Kaç bölüm test edilecek
-    render_speed = 0.02  # Render hızı (saniye)
+    """Test trained PPO agent"""
+
+    # Configuration
+    model_name = "Ant-v5_PPO_ANTIHOPPING_16envs_2025-11-05_18-09-09_BEST"
+    num_episodes = 10
+    render_speed = 0.02  # seconds between frames
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[DEVICE] Using: {device}")
 
-    # Ortamı 'human' modunda oluştur
+    # Create environment with visualization
     env = gym.make('Ant-v5', render_mode='human')
 
     state_dim = env.observation_space.shape[0]
@@ -26,22 +35,22 @@ def test():
     print(f"[INFO] Action Dimension: {action_dim}")
     print(f"[INFO] Max Action: {max_action}")
 
-    # Agent'ı oluştur
+    # Create agent
     agent = PPOAgent(
         state_dim, action_dim, max_action,
-        actor_lr=3e-4, critic_lr=1e-3,
+        actor_lr=3e-4, critic_lr=3e-4,
         gamma=0.99, gae_lambda=0.95,
         clip_ratio=0.2, device=device
     )
     agent.to(device)
 
-    # Model yükle
+    # Load trained model
     try:
         agent.load("models", model_name)
-        print(f"[OK] '{model_name}' modeli başarıyla yüklendi.")
+        print(f"[OK] Loaded model: {model_name}")
     except FileNotFoundError:
-        print(f"[ERROR] '{model_name}' bulunamadı!")
-        print("[INFO] 'models' klasöründeki dosyalar:")
+        print(f"[ERROR] Model not found: {model_name}")
+        print("[INFO] Available models in 'models' directory:")
         import os
         if os.path.exists("models"):
             files = [f for f in os.listdir("models") if f.endswith('_actor.pth')]
@@ -49,12 +58,13 @@ def test():
                 print(f"  - {f.replace('_actor.pth', '')}")
         return
 
-    print(f"\n{'='*60}")
-    print(f"[START] {num_episodes} EPISODE TEST BAŞLIYOR")
-    print(f"{'='*60}\n")
+    print(f"\n{'=' * 60}")
+    print(f"[START] Testing for {num_episodes} episodes")
+    print(f"{'=' * 60}\n")
 
     episode_rewards = []
 
+    # Run episodes
     for episode_idx in range(num_episodes):
         state, info = env.reset()
         done = False
@@ -63,28 +73,27 @@ def test():
 
         while not done:
             with torch.no_grad():
-                # 1. State'i tensor'e çevir
+                # Convert state to tensor
                 state_tensor = torch.FloatTensor(state.reshape(1, -1)).to(device)
 
-                # 2. Normalize et (eğitimde kullanılan istatistiklerle)
+                # Normalize using training statistics
                 norm_state_tensor = torch.clamp(
                     (state_tensor - agent.obs_rms.mean) / torch.sqrt(agent.obs_rms.var + 1e-8),
                     -10.0, 10.0
                 )
 
-                # 3. Deterministik eylem seç (mean kullan, sample değil)
+                # Get deterministic action (mean, not sample)
                 action_dist = agent.actor(norm_state_tensor)
-                action = action_dist.mean  # Testte deterministik
+                action = action_dist.mean
 
-            # Eylemi uygula
+            # Execute action
             state, reward, terminated, truncated, info = env.step(action.cpu().numpy().flatten())
             done = terminated or truncated
             total_reward += reward
             step_count += 1
 
-            # Render'ı yavaşlat
+            # Control render speed
             time.sleep(render_speed)
-            time.sleep(0.05)
 
         episode_rewards.append(total_reward)
         print(f"[EPISODE {episode_idx + 1}/{num_episodes}] "
@@ -92,15 +101,15 @@ def test():
 
     env.close()
 
-    # İstatistikler
-    print(f"\n{'='*60}")
-    print(f"[RESULTS] TEST TAMAMLANDI")
-    print(f"{'='*60}")
+    # Print statistics
+    print(f"\n{'=' * 60}")
+    print(f"[RESULTS] Testing Complete")
+    print(f"{'=' * 60}")
     print(f"Average Reward: {np.mean(episode_rewards):.2f}")
     print(f"Std Dev: {np.std(episode_rewards):.2f}")
     print(f"Min Reward: {np.min(episode_rewards):.2f}")
     print(f"Max Reward: {np.max(episode_rewards):.2f}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
 
 if __name__ == '__main__':

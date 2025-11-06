@@ -1,20 +1,12 @@
 """
-FINAL PPO AGENT - PRODUCTION READY
-====================================
+PPO Agent Implementation
+========================
 
-SON DEĞİŞİKLİKLER:
-1. ✅ Observation normalization tutarlılığı (get_action)
-2. ✅ Reward normalization
-3. ✅ Batch size < 2 kontrolü (NaN fix)
-4. ✅ Value loss coefficient (0.5)
-5. ✅ Advantage norm timing
-6. ✅ Log STD optimize (-0.5)
-
-YENI İYİLEŞTİRMELER (Bu eğitim için):
-7. ✅ Critic LR düşürüldü (1e-3 → 3e-4)
-8. ✅ Entropy coef düşürüldü (0.02 → 0.01)
-
-Developed from scratch with battle-tested improvements!
+Proximal Policy Optimization agent with:
+- Actor-Critic architecture
+- Generalized Advantage Estimation (GAE)
+- Observation and reward normalization
+- Clipped surrogate objective
 """
 
 import torch
@@ -25,10 +17,8 @@ import numpy as np
 
 class RunningMeanStd:
     """
-    Welford's online algorithm for running mean and std
-
-    Ne yapar: Gelen veriyi tek tek işleyerek ortalama ve varyans hesaplar
-    Neden: Tüm veriyi saklamaya gerek yok, memory efficient
+    Welford's online algorithm for computing running mean and standard deviation.
+    Memory-efficient as it doesn't store all historical data.
     """
     def __init__(self, shape, device):
         self.mean = torch.zeros(shape).to(device)
@@ -36,16 +26,12 @@ class RunningMeanStd:
         self.count = 1e-4
 
     def update(self, x):
-        """
-        YENİ: Batch size < 2 kontrolü ekledik
-        Neden: Tek sample'dan variance hesaplanamaz → NaN hatası
-        """
-        # Batch size kontrolü
+        """Update running statistics with new batch"""
         if x.shape[0] < 2:
-            return  # Skip update
+            return  # Skip if batch too small
 
         batch_mean = torch.mean(x, dim=0)
-        batch_var = torch.var(x, dim=0, unbiased=False)  # unbiased=False → stabil
+        batch_var = torch.var(x, dim=0, unbiased=False)
         batch_count = x.shape[0]
 
         delta = batch_mean - self.mean
@@ -63,6 +49,10 @@ class RunningMeanStd:
 
 
 class ActorNetwork(nn.Module):
+    """
+    Policy network (actor) that outputs action distribution
+    Uses tanh activation and diagonal Gaussian policy
+    """
     def __init__(self, state_dim, action_dim, max_action):
         super(ActorNetwork, self).__init__()
         self.fc1 = nn.Linear(state_dim, 256)
@@ -71,10 +61,10 @@ class ActorNetwork(nn.Module):
         self.mean_layer = nn.Linear(128, action_dim)
         self.max_action = max_action
 
-        # Log STD: -0.5 başlangıç (std = exp(-0.5) = 0.6)
+        # Learnable log standard deviation
         self.log_std = nn.Parameter(torch.ones(1, action_dim) * -0.5)
 
-        # Orthogonal initialization (değişiklik yok, zaten iyi)
+        # Orthogonal initialization
         torch.nn.init.orthogonal_(self.fc1.weight, gain=np.sqrt(2))
         torch.nn.init.orthogonal_(self.fc2.weight, gain=np.sqrt(2))
         torch.nn.init.orthogonal_(self.fc3.weight, gain=np.sqrt(2))
@@ -85,10 +75,7 @@ class ActorNetwork(nn.Module):
         x = torch.tanh(self.fc2(x))
         x = torch.tanh(self.fc3(x))
 
-        # Mean: tanh ile sınırla (NaN önler)
         mean = self.max_action * torch.tanh(self.mean_layer(x))
-
-        # Log std sınırlama
         log_std = torch.clamp(self.log_std, -20, 2)
         log_std = log_std.expand_as(mean)
 
@@ -98,6 +85,9 @@ class ActorNetwork(nn.Module):
 
 
 class CriticNetwork(nn.Module):
+    """
+    Value network (critic) that estimates state value V(s)
+    """
     def __init__(self, state_dim):
         super(CriticNetwork, self).__init__()
         self.fc1 = nn.Linear(state_dim, 256)
@@ -120,7 +110,18 @@ class CriticNetwork(nn.Module):
 
 
 class PPOAgent:
-    def __init__(self, state_dim, action_dim, max_action, actor_lr, critic_lr, gamma, gae_lambda, clip_ratio, device):
+    """
+    PPO Agent with Actor-Critic architecture
+
+    Features:
+    - Observation normalization using running statistics
+    - Optional reward normalization
+    - GAE for advantage estimation
+    - Clipped surrogate objective
+    - Early stopping based on KL divergence
+    """
+    def __init__(self, state_dim, action_dim, max_action, actor_lr, critic_lr,
+                 gamma, gae_lambda, clip_ratio, device):
         self.gamma = gamma
         self.gae_lambda = gae_lambda
         self.clip_ratio = clip_ratio
@@ -134,16 +135,18 @@ class PPOAgent:
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr, eps=1e-5)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr, eps=1e-5)
 
-        # Normalization
+        # Normalization statistics
         self.obs_rms = RunningMeanStd(shape=(state_dim,), device=device)
         self.reward_rms = RunningMeanStd(shape=(1,), device=device)
         self.normalize_rewards = True
 
     def to(self, device):
+        """Move networks to device"""
         self.actor.to(device)
         self.critic.to(device)
 
     def save(self, directory, filename):
+        """Save model and normalization statistics"""
         print("[SAVE] Saving models...")
         torch.save(self.actor.state_dict(), f'./{directory}/{filename}_actor.pth')
         torch.save(self.critic.state_dict(), f'./{directory}/{filename}_critic.pth')
@@ -157,6 +160,7 @@ class PPOAgent:
         }, f'./{directory}/{filename}_rms.pth')
 
     def load(self, directory, filename):
+        """Load model and normalization statistics"""
         print("[LOAD] Loading models...")
         self.actor.load_state_dict(torch.load(f'./{directory}/{filename}_actor.pth', map_location=self.device))
         self.critic.load_state_dict(torch.load(f'./{directory}/{filename}_critic.pth', map_location=self.device))
@@ -171,13 +175,20 @@ class PPOAgent:
 
     def get_action(self, state):
         """
-        Observation norm ile tutarlı action seçimi
-        Training ve inference aynı normalization kullanır
+        Get action from current policy
+
+        Args:
+            state: Environment state
+
+        Returns:
+            action: Sampled action
+            log_prob: Log probability of action
+            value: Estimated state value
         """
         if not isinstance(state, torch.Tensor):
             state = torch.FloatTensor(state).to(self.device)
 
-        # Normalize
+        # Normalize observation
         norm_state = torch.clamp(
             (state - self.obs_rms.mean) / torch.sqrt(self.obs_rms.var + 1e-8),
             -10.0, 10.0
@@ -192,7 +203,7 @@ class PPOAgent:
         return action, log_prob, value
 
     def normalize_reward(self, reward):
-        """Reward normalization - Critic loss'u düşürür"""
+        """Normalize reward using running statistics"""
         if not self.normalize_rewards:
             return reward
 
@@ -207,7 +218,19 @@ class PPOAgent:
         return normalized.item() if isinstance(reward, (int, float)) else normalized.flatten()
 
     def compute_advantages(self, rewards, dones, values, next_value):
-        """GAE ile advantage hesaplama"""
+        """
+        Compute advantages using Generalized Advantage Estimation (GAE)
+
+        Args:
+            rewards: List of rewards
+            dones: List of done flags
+            values: List of state values
+            next_value: Value of next state
+
+        Returns:
+            advantages: Computed advantages
+            returns: Computed returns (targets for value function)
+        """
         device = next_value.device
         rewards = torch.tensor(rewards, dtype=torch.float32).view(-1, 1).to(device)
         dones = torch.tensor(dones, dtype=torch.float32).view(-1, 1).to(device)
@@ -220,6 +243,7 @@ class PPOAgent:
         last_advantage = 0
         last_return = next_value
 
+        # Backward computation of advantages
         for t in reversed(range(num_steps)):
             mask = 1.0 - dones[t]
             delta = rewards[t] + self.gamma * values[t + 1] * mask - values[t]
@@ -229,26 +253,42 @@ class PPOAgent:
             advantages[t] = last_advantage
             returns[t] = last_return
 
-        # Advantage normalization (bir kez!)
+        # Normalize advantages
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         return advantages, returns
 
     def learn(self, states, actions, log_probs, returns, advantages, num_epochs, batch_size, entropy_coef):
+        """
+        Update policy and value function using PPO
+
+        Args:
+            states: Batch of states
+            actions: Batch of actions
+            log_probs: Batch of log probabilities
+            returns: Batch of returns
+            advantages: Batch of advantages
+            num_epochs: Number of update epochs
+            batch_size: Mini-batch size
+            entropy_coef: Entropy coefficient for exploration
+
+        Returns:
+            actor_loss: Mean actor loss
+            critic_loss: Mean critic loss
+            avg_std: Average action standard deviation
+        """
         device = returns.device
         states = torch.tensor(np.array(states), dtype=torch.float32).to(device)
 
-        # Paralel env desteği: Eğer zaten tensor ise cat yapma!
+        # Handle parallel environments
         if isinstance(actions, list):
             actions = torch.cat(actions, dim=0)
-        # Eğer zaten tensor ise (paralel env), olduğu gibi kullan
-
         if isinstance(log_probs, list):
             old_log_probs = torch.cat(log_probs, dim=0)
         else:
             old_log_probs = log_probs
 
-        # Observation normalization güncelle
+        # Update observation normalization
         self.obs_rms.update(states)
 
         actor_losses = []
@@ -272,35 +312,36 @@ class PPOAgent:
                 batch_advantages = advantages[batch_indices]
                 batch_returns = returns[batch_indices]
 
-                # Observation normalization
+                # Normalize observations
                 norm_batch_states = torch.clamp(
                     (batch_states - self.obs_rms.mean) / torch.sqrt(self.obs_rms.var + 1e-8),
                     -10.0, 10.0
                 )
 
-                # --- ACTOR LOSS ---
+                # Actor loss
                 dist = self.actor(norm_batch_states)
                 std_devs.append(dist.stddev.mean().item())
 
                 new_log_probs = dist.log_prob(batch_actions).sum(dim=-1)
                 ratio = torch.exp(new_log_probs - batch_old_log_probs)
 
-                # KL divergence
+                # KL divergence for early stopping
                 with torch.no_grad():
                     kl_div = (batch_old_log_probs - new_log_probs).mean().item()
                     kl_divs.append(kl_div)
 
+                # Clipped surrogate objective
                 surr1 = ratio * batch_advantages.squeeze()
                 surr2 = torch.clamp(ratio, 1 - self.clip_ratio, 1 + self.clip_ratio) * batch_advantages.squeeze()
 
                 entropy_loss = dist.entropy().mean()
                 actor_loss = -torch.min(surr1, surr2).mean() - entropy_coef * entropy_loss
 
-                # --- CRITIC LOSS ---
+                # Critic loss
                 new_values = self.critic(norm_batch_states).squeeze()
                 critic_loss = 0.5 * nn.MSELoss()(new_values, batch_returns.squeeze())
 
-                # --- BACKPROP ---
+                # Update networks
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
@@ -314,7 +355,7 @@ class PPOAgent:
                 actor_losses.append(actor_loss.item())
                 critic_losses.append(critic_loss.item())
 
-            # Early stopping
+            # Early stopping if KL divergence too large
             mean_kl = np.mean(kl_divs[-len(range(0, num_samples, batch_size)):])
             if mean_kl > 0.02:
                 print(f"[EARLY STOP] Epoch {epoch + 1}/{num_epochs} (KL={mean_kl:.4f})")
