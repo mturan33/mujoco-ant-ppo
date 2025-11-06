@@ -478,19 +478,6 @@ Comparison with other PPO implementations:
    - GPU non-determinism despite seed fixing
    - TensorBoard logs consume significant disk space
 
-### Troubleshooting
-
-**Issue:** Training instability in first 1M steps  
-**Solution:** Normal behavior. Agent explores aggressively early on. Check avg-100 metric instead of per-episode rewards.
-
-**Issue:** "CUDA out of memory" error  
-**Solution:** Reduce `num_envs` from 16 to 8 in `main_parallel.py`. Training time will double.
-
-**Issue:** Demo video is choppy  
-**Solution:** Reduce `max_episode_steps` from 200 to 150 in `demo_2x2.py` or increase `time.sleep(0.01)` to `0.02`.
-
----
-
 ## Future Work
 
 ### Planned Improvements
@@ -512,19 +499,7 @@ Comparison with other PPO implementations:
    - Hierarchical RL for complex locomotion patterns
    - Model-based planning (Dreamer, MPPI)
 
-4. **Real-World Deployment**
-   - Sim-to-real transfer with system identification
-   - Safety constraints for hardware experiments
-   - Real-time inference optimization (<10ms latency)
-   - Integration with ROS2 for robotic platforms
-
-5. **Code Quality**
-   - Unit tests for PPO components
-   - CI/CD pipeline for automated testing
-   - Docker container for reproducible environment
-   - Multi-GPU training support
-
-6. **Addressing Hopping Problem (Long-term)**
+4. **Addressing Hopping Problem (Long-term)**
    - **Automated Penalty Tuning:** Use meta-learning or Bayesian optimization to find optimal height penalty coefficient without manual tuning
    - **Gait Library:** Pre-train on diverse gait patterns (walk, trot, gallop) and fine-tune for specific tasks
    - **Curriculum Learning:** Start with strict height penalty, gradually relax to allow natural movement
@@ -541,12 +516,6 @@ Contributions are welcome! Please feel free to:
 - Submit feature requests
 - Open pull requests with improvements
 - Share training results on different environments
-
-**Development Guidelines:**
-- Follow PEP 8 style guide
-- Add docstrings to new functions
-- Update README if adding features
-- Test on Ant-v5 before submitting
 
 ---
 
